@@ -1,0 +1,19 @@
+{
+  "name": "hrm-backend",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ayeshakhan-29/hrm-backend.git"
+  },
+  "author": "Ayesha",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ayeshakhan-29/hrm-backend/issues"
+  },
+  "homepage": "https://github.com/ayeshakhan-29/hrm-backend#readme",
+  "description": ""
+}
