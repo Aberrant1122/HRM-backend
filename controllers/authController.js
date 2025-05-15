@@ -1,13 +1,35 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User } = require('../models'); // Make sure to import your User model
+const { User } = require('../models'); 
+const { body, validationResult } = require('express-validator');
 
-// Secret key for JWT signing (store it securely in environment variables)
+// Secret key for JWT signing (store securely in environment variables)
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || 'your_secret_key';
+
+// Middleware for validation rules
+const validateRegister = [
+  body('fullName').notEmpty().withMessage('Full name is required'),
+  body('email').isEmail().withMessage('Valid email is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+];
+
+const validateLogin = [
+  body('email').isEmail().withMessage('Valid email is required'),
+  body('password').notEmpty().withMessage('Password is required')
+];
 
 // Controller for user registration
 const register = async (req, res) => {
-  const { fullName, email, password, role } = req.body;
+  // Check for validation errors
+  const errors = validationResult(req);
+  
+  console.log('Validation Errors:', errors.array()); // Debugging
+
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() }); // Send validation errors properly
+  }
+
+  const { fullName, email, password } = req.body;
 
   try {
     // Check if the user already exists
@@ -24,18 +46,27 @@ const register = async (req, res) => {
       fullName,
       email,
       password: hashedPassword,
-      role
     });
 
     return res.status(201).json({ message: 'User registered successfully', user: newUser });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Error in register:', error);
+
+    return res.status(500).json({ 
+      message: 'Internal Server Error', 
+      error: error.message // Ensure error message is sent
+    });
   }
 };
 
 // Controller for user login
 const login = async (req, res) => {
+  // Check for validation errors
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   const { email, password } = req.body;
 
   try {
@@ -63,5 +94,7 @@ const login = async (req, res) => {
 
 module.exports = {
   register,
-  login
+  login,
+  validateRegister,
+  validateLogin
 };
