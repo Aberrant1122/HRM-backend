@@ -47,5 +47,8 @@ module.exports = (sequelize, DataTypes) => {
       tableName: 'users',
       timestamps: true
   });
+  User.associate = (models) => {
+    User.hasOne(models.UserInfo, { foreignKey: 'userId', as: 'userInfo', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+  };
   return User;
 };
