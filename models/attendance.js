@@ -11,6 +11,45 @@ module.exports = (sequelize, DataTypes) => {
         onUpdate: "CASCADE",
       });
     }
+
+    // Method to format time in PKT timezone
+    getPKTFormat(time) {
+      if (!time) return null;
+      const utc = new Date(time);
+      const pkt = new Date(utc.getTime() + (5 * 60 * 60 * 1000));
+      return pkt.toLocaleString('en-PK', {
+        timeZone: 'Asia/Karachi',
+        hour12: false,
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+    }
+
+    // Method to format date in PKT timezone
+    getPKTDate(time) {
+      if (!time) return null;
+      const utc = new Date(time);
+      const pkt = new Date(utc.getTime() + (5 * 60 * 60 * 1000));
+      return pkt.toLocaleDateString('en-PK', {
+        timeZone: 'Asia/Karachi',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit'
+      });
+    }
+
+    // Method to convert hours to HH:MM format
+    getHoursFormat(hours) {
+      if (hours === null || hours === undefined) return null;
+      
+      // Get hours and minutes from the decimal value
+      const hoursPart = Math.floor(hours);
+      const minutesPart = Math.floor((hours - hoursPart) * 60);
+      
+      // Format as HH:MM
+      return `${hoursPart.toString().padStart(2, '0')}:${minutesPart.toString().padStart(2, '0')}`;
+    }
   }
 
   Attendance.init(
@@ -26,7 +65,6 @@ module.exports = (sequelize, DataTypes) => {
       date: {
         type: DataTypes.DATEONLY,
         allowNull: false,
-        defaultValue: () => new Date().toISOString().slice(0, 10), // gives 'YYYY-MM-DD'
       },
 
       clockIn: {
