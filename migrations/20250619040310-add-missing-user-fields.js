@@ -6,9 +6,11 @@ module.exports = {
     const transaction = await queryInterface.sequelize.transaction();
     
     try {
+      // Get all existing columns
+      const tableDescription = await queryInterface.describeTable('users');
+      
       // Add status column if it doesn't exist
-      const statusColumn = await queryInterface.describeTable('users').status;
-      if (!statusColumn) {
+      if (!tableDescription.status) {
         await queryInterface.addColumn(
           'users',
           'status',
@@ -23,8 +25,7 @@ module.exports = {
       }
 
       // Add resetToken column if it doesn't exist
-      const resetTokenColumn = await queryInterface.describeTable('users').resetToken;
-      if (!resetTokenColumn) {
+      if (!tableDescription.resetToken) {
         await queryInterface.addColumn(
           'users',
           'resetToken',
@@ -38,8 +39,7 @@ module.exports = {
       }
 
       // Add resetTokenExpiry column if it doesn't exist
-      const resetTokenExpiryColumn = await queryInterface.describeTable('users').resetTokenExpiry;
-      if (!resetTokenExpiryColumn) {
+      if (!tableDescription.resetTokenExpiry) {
         await queryInterface.addColumn(
           'users',
           'resetTokenExpiry',
@@ -53,8 +53,7 @@ module.exports = {
       }
 
       // Add lastLogin column if it doesn't exist
-      const lastLoginColumn = await queryInterface.describeTable('users').lastLogin;
-      if (!lastLoginColumn) {
+      if (!tableDescription.lastLogin) {
         await queryInterface.addColumn(
           'users',
           'lastLogin',
@@ -68,8 +67,7 @@ module.exports = {
       }
 
       // Add passwordChangedAt column if it doesn't exist
-      const passwordChangedAtColumn = await queryInterface.describeTable('users').passwordChangedAt;
-      if (!passwordChangedAtColumn) {
+      if (!tableDescription.passwordChangedAt) {
         await queryInterface.addColumn(
           'users',
           'passwordChangedAt',
