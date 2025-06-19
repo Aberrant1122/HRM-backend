@@ -26,7 +26,7 @@ router.post("/set-password", validateSetPassword, setPassword);
 router.use(isAuthenticated);
 
 // Employee routes
-router.use(isEmployee);
+// router.use(isEmployee);
 // Add employee-specific routes here
 
 // Admin routes
