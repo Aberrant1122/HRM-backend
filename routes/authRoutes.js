@@ -2,10 +2,12 @@ const express = require("express");
 const {
   inviteEmployee,
   login,
+  register,
   setPassword,
   requestPasswordReset,
   validateInviteEmployee,
   validateLogin,
+  validateRegister,
   validateSetPassword,
   isAuthenticated,
   isAdmin,
@@ -15,6 +17,7 @@ const {
 const router = express.Router();
 
 // Public routes
+router.post("/register", validateRegister, register);
 router.post("/login", validateLogin, login);
 router.post("/request-password-reset", requestPasswordReset);
 router.post("/set-password", validateSetPassword, setPassword);

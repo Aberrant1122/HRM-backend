@@ -39,6 +39,13 @@ const validateSetPassword = [
   body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
 ];
 
+const validateRegister = [
+  body('fullName').trim().notEmpty().withMessage('Full name is required'),
+  body('email').isEmail().withMessage('Valid email is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
+  body('role').optional().isIn(['admin', 'employee']).withMessage('Invalid role')
+];
+
 // Controller for inviting a new employee (Admin only)
 const inviteEmployee = async (req, res) => {
   // Check if user is admin
@@ -206,6 +213,48 @@ const isAdmin = (req, res, next) => {
 };
 
 // Middleware to check if user has employee role
+// Register a new user
+const register = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { fullName, email, password, role = 'employee' } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Create new user
+    const user = await User.create({
+      fullName,
+      email,
+      password,
+      role,
+      status: 'active',
+      emailVerified: true
+    });
+
+    // Remove sensitive data before sending response
+    const userJson = user.toJSON();
+    delete userJson.password;
+    delete userJson.resetToken;
+    delete userJson.resetTokenExpiry;
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      user: userJson
+    });
+  } catch (error) {
+    console.error('Registration error:', error);
+    res.status(500).json({ message: 'Error registering user', error: error.message });
+  }
+};
+
 const isEmployee = (req, res, next) => {
   if (req.user.role !== 'employee') {
     return res.status(403).json({ message: 'Access denied. Employee privileges required.' });
@@ -296,6 +345,8 @@ module.exports = {
   setPassword,
   requestPasswordReset,
   validateInviteEmployee,
+  validateRegister,
+  register,
   validateLogin,
   validateSetPassword,
   isAuthenticated,
