@@ -1,16 +1,32 @@
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { User } = require('../models'); 
+const crypto = require('crypto');
+const { Sequelize } = require('sequelize');
+const { User } = require('../models');
 const { body, validationResult } = require('express-validator');
+const nodemailer = require('nodemailer');
 
-// Secret key for JWT signing (store securely in environment variables)
+// Load environment variables
 const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || 'your_secret_key';
+const EMAIL_SERVICE = process.env.EMAIL_SERVICE || 'gmail';
+const EMAIL_USER = process.env.EMAIL_USER || '';
+const EMAIL_PASS = process.env.EMAIL_PASS || '';
+const APP_URL = process.env.APP_URL || 'http://localhost:3000';
+
+// Email transporter
+const transporter = nodemailer.createTransport({
+  service: EMAIL_SERVICE,
+  auth: {
+    user: EMAIL_USER,
+    pass: EMAIL_PASS,
+  },
+});
 
 // Middleware for validation rules
-const validateRegister = [
+const validateInviteEmployee = [
   body('fullName').notEmpty().withMessage('Full name is required'),
   body('email').isEmail().withMessage('Valid email is required'),
-  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+  body('role').isIn(['employee', 'manager']).withMessage('Invalid role')
 ];
 
 const validateLogin = [
@@ -18,37 +34,71 @@ const validateLogin = [
   body('password').notEmpty().withMessage('Password is required')
 ];
 
-// Controller for user registration
-const register = async (req, res) => {
-  // Check for validation errors
-  const errors = validationResult(req);
-  
-  console.log('Validation Errors:', errors.array()); // Debugging
+const validateSetPassword = [
+  body('token').notEmpty().withMessage('Token is required'),
+  body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long')
+];
 
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() }); // Send validation errors properly
+// Controller for inviting a new employee (Admin only)
+const inviteEmployee = async (req, res) => {
+  // Check if user is admin
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Only admins can invite employees' });
   }
 
-  const { fullName, email, password } = req.body;
+  // Validate request
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
+  const { fullName, email, role } = req.body;
 
   try {
-    // Check if the user already exists
+    // Check if user already exists
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
+      return res.status(400).json({ message: 'User with this email already exists' });
     }
 
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
+    // Generate a random password reset token
+    const resetToken = crypto.randomBytes(20).toString('hex');
+    const resetTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
 
-    // Create a new user
+    // Create user with temporary password
+    const tempPassword = crypto.randomBytes(8).toString('hex');
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
     const newUser = await User.create({
       fullName,
       email,
       password: hashedPassword,
+      role,
+      resetToken,
+      resetTokenExpiry,
+      status: 'inactive'
     });
 
-    return res.status(201).json({ message: 'User registered successfully', user: newUser });
+    // Send invitation email
+    const resetUrl = `${APP_URL}/auth/set-password?token=${resetToken}`;
+    
+    await transporter.sendMail({
+      to: email,
+      subject: 'You have been invited to join our HRM system',
+      html: `
+        <p>Hello ${fullName},</p>
+        <p>You have been invited to join our HRM system as a ${role}.</p>
+        <p>Please click the following link to set your password and activate your account:</p>
+        <p><a href="${resetUrl}">Set Password</a></p>
+        <p>This link will expire in 24 hours.</p>
+      `
+    });
+
+    return res.status(201).json({ 
+      message: 'Invitation sent successfully',
+      userId: newUser.id,
+      resetToken // Only for testing, remove in production
+    });
   } catch (error) {
     console.error('Error in register:', error);
 
@@ -61,7 +111,7 @@ const register = async (req, res) => {
 
 // Controller for user login
 const login = async (req, res) => {
-  // Check for validation errors
+  // Validate request
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({ errors: errors.array() });
@@ -70,31 +120,189 @@ const login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
-    // Find user by email
-    const user = await User.findOne({ where: { email } });
+    // Find user by email with password included
+    const user = await User.scope('withSensitiveData').findOne({ where: { email } });
+    
     if (!user) {
-      return res.status(404).json({ message: 'User not found' });
+      return res.status(401).json({ message: 'Invalid email or password' });
     }
 
-    // Compare provided password with stored hashed password
-    const isMatch = await bcrypt.compare(password, user.password);
+    // Check if password is set
+    if (!user.password) {
+      return res.status(401).json({ 
+        message: 'No password set. Please use the password reset function.' 
+      });
+    }
+
+    // Check if password is correct
+    const isMatch = await user.comparePassword(password);
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+
+    // Check if account is active
+    if (user.status !== 'active') {
+      return res.status(403).json({ 
+        message: 'Account is not active. Please contact an administrator.' 
+      });
     }
 
     // Generate JWT token
-    const token = jwt.sign({ userId: user.id, role: user.role }, JWT_SECRET_KEY, { expiresIn: '1h' });
+    const token = jwt.sign(
+      { 
+        id: user.id, 
+        role: user.role,
+        email: user.email
+      },
+      JWT_SECRET_KEY,
+      { expiresIn: '8h' }
+    );
 
-    return res.status(200).json({ message: 'Login successful', token });
+    // Update last login time
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Send token and user info (without sensitive data)
+    const userData = user.get({ plain: true });
+    delete userData.password;
+    delete userData.resetToken;
+    delete userData.resetTokenExpiry;
+
+    res.json({
+      token,
+      user: userData,
+      expiresIn: 28800 // 8 hours in seconds
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ message: 'Internal Server Error' });
+    console.error('Login error:', error);
+    res.status(500).json({ message: 'Server error during login' });
+  }
+};
+
+// Middleware to check if user is authenticated
+const isAuthenticated = (req, res, next) => {
+  try {
+    const token = req.header('Authorization')?.replace('Bearer ', '');
+    
+    if (!token) {
+      return res.status(401).json({ message: 'No token, authorization denied' });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET_KEY);
+    req.user = decoded;
+    next();
+  } catch (error) {
+    console.error('Authentication error:', error);
+    res.status(401).json({ message: 'Token is not valid' });
+  }
+};
+
+// Middleware to check if user has admin role
+const isAdmin = (req, res, next) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Access denied. Admin privileges required.' });
+  }
+  next();
+};
+
+// Middleware to check if user has employee role
+const isEmployee = (req, res, next) => {
+  if (req.user.role !== 'employee') {
+    return res.status(403).json({ message: 'Access denied. Employee privileges required.' });
+  }
+  next();
+};
+
+// Controller for setting a new password
+const setPassword = async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { token, password } = req.body;
+
+    // Find user by reset token and check if it's not expired
+    const user = await User.findOne({
+      where: {
+        resetToken: token,
+        resetTokenExpiry: { [Sequelize.Op.gt]: Date.now() }
+      }
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: 'Invalid or expired token' });
+    }
+
+    // Update user's password and clear reset token
+    user.password = password;
+    user.resetToken = null;
+    user.resetTokenExpiry = null;
+    await user.save();
+
+    res.status(200).json({ message: 'Password updated successfully' });
+  } catch (error) {
+    console.error('Error setting password:', error);
+    res.status(500).json({ message: 'Error setting password' });
+  }
+};
+
+// Controller for requesting a password reset
+const requestPasswordReset = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const user = await User.findOne({ where: { email } });
+    if (!user) {
+      // Don't reveal that the email doesn't exist for security
+      return res.status(200).json({ message: 'If your email is registered, you will receive a password reset link' });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenExpiry = Date.now() + 3600000; // 1 hour from now
+
+    // Save token to user
+    user.resetToken = resetToken;
+    user.resetTokenExpiry = new Date(resetTokenExpiry);
+    await user.save();
+
+    // Send email with reset link
+    const resetUrl = `${APP_URL}/reset-password?token=${resetToken}`;
+    
+    await transporter.sendMail({
+      from: `"HRM System" <${EMAIL_USER}>`,
+      to: user.email,
+      subject: 'Password Reset Request',
+      html: `
+        <p>You requested a password reset. Click the link below to set a new password:</p>
+        <p><a href="${resetUrl}">${resetUrl}</a></p>
+        <p>This link will expire in 1 hour.</p>
+        <p>If you didn't request this, please ignore this email.</p>
+      `
+    });
+
+    res.status(200).json({ message: 'Password reset link sent to your email' });
+  } catch (error) {
+    console.error('Error requesting password reset:', error);
+    res.status(500).json({ message: 'Error processing your request' });
   }
 };
 
 module.exports = {
-  register,
+  inviteEmployee,
   login,
-  validateRegister,
-  validateLogin
+  setPassword,
+  requestPasswordReset,
+  validateInviteEmployee,
+  validateLogin,
+  validateSetPassword,
+  isAuthenticated,
+  isAdmin,
+  isEmployee,
+  // For testing only
+  _test: {
+    transporter
+  }
 };
