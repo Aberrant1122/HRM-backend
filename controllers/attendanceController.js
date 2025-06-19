@@ -1,15 +1,25 @@
-const { Attendance } = require("../models");
+const { Attendance, User } = require("../models");
 
 // --- Helper Functions ---
 
-// Convert UTC Date to PKT (Asia/Karachi)
-const toPKT = (date) => new Date(date.getTime() + 5 * 60 * 60 * 1000);
+// Convert any input (Date or string) to PKT safely
+const toPKT = (input) => {
+  const date = new Date(input);
+  if (isNaN(date)) return null; // handle invalid dates
+  return new Date(date.getTime() + 5 * 60 * 60 * 1000);
+};
 
-// Format Date to 'YYYY-MM-DD'
-const formatDate = (date) => date.toISOString().slice(0, 10);
+// Format Date to 'YYYY-MM-DD' in PKT
+const formatDate = (input) => {
+  const pkt = toPKT(input);
+  return pkt ? pkt.toISOString().slice(0, 10) : null;
+};
 
 // Format Time to readable PKT time (e.g., '18:42:12')
-const formatTimePKT = (date) => toPKT(date).toTimeString().slice(0, 8);
+const formatTimePKT = (input) => {
+  const pkt = toPKT(input);
+  return pkt ? pkt.toTimeString().slice(0, 8) : null;
+};
 
 // Format Total Hours (e.g., "4h 30m")
 const formatHours = (hours) => {
@@ -19,16 +29,12 @@ const formatHours = (hours) => {
 };
 
 // --- Clock In ---
-
 const clockIn = async (req, res) => {
   try {
     const userId = req.user.userId;
-
     const nowUTC = new Date();
-    const nowPKT = toPKT(nowUTC);
-    const todayPKT = formatDate(nowPKT); // YYYY-MM-DD in PKT
+    const todayPKT = formatDate(nowUTC);
 
-    // Check if already clocked in
     const existing = await Attendance.findOne({
       where: { userId, date: todayPKT },
     });
@@ -37,11 +43,10 @@ const clockIn = async (req, res) => {
       return res.status(400).json({ message: "Already clocked in for today" });
     }
 
-    // Save UTC to DB but use PKT date for grouping
     const attendance = await Attendance.create({
       userId,
-      date: todayPKT, // Store PKT date only
-      clockIn: nowUTC, // UTC time
+      date: todayPKT,
+      clockIn: nowUTC,
       status: "present",
     });
 
@@ -62,14 +67,11 @@ const clockIn = async (req, res) => {
 };
 
 // --- Clock Out ---
-
 const clockOut = async (req, res) => {
   try {
     const userId = req.user.userId;
-
     const nowUTC = new Date();
-    const nowPKT = toPKT(nowUTC);
-    const todayPKT = formatDate(nowPKT);
+    const todayPKT = formatDate(nowUTC);
 
     const attendance = await Attendance.findOne({
       where: { userId, date: todayPKT },
@@ -81,8 +83,7 @@ const clockOut = async (req, res) => {
         .json({ message: "Not clocked in or already clocked out" });
     }
 
-    const clockInPKT = toPKT(new Date(attendance.clockIn));
-    const workedMs = nowPKT - clockInPKT;
+    const workedMs = toPKT(nowUTC) - toPKT(attendance.clockIn);
     const workedHours = workedMs / (1000 * 60 * 60);
 
     attendance.clockOut = nowUTC;
@@ -108,4 +109,49 @@ const clockOut = async (req, res) => {
   }
 };
 
-module.exports = { clockIn, clockOut };
+// --- Get All Attendance (Admin) ---
+const getAllAttendance = async (req, res) => {
+  try {
+    const records = await Attendance.findAll({
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "fullName", "email"],
+        },
+      ],
+      order: [["date", "DESC"]],
+    });
+
+    const formatted = records.map((record) => {
+      return {
+        id: record.id,
+        userId: record.userId,
+        fullName: record.user?.fullName || "N/A",
+        email: record.user?.email || "N/A",
+        date: formatDate(record.date),
+        clockIn: formatTimePKT(record.clockIn),
+        clockOut: formatTimePKT(record.clockOut),
+        totalHours: record.totalHours,
+        formattedHours: record.totalHours
+          ? formatHours(record.totalHours)
+          : null,
+        status: record.status,
+      };
+    });
+
+    return res.status(200).json({ success: true, attendance: formatted });
+  } catch (error) {
+    console.error("getAllAttendance error:", error);
+    return res.status(500).json({
+      message: "Failed to fetch attendance",
+      error: error.message,
+    });
+  }
+};
+
+module.exports = {
+  clockIn,
+  clockOut,
+  getAllAttendance,
+};
