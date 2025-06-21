@@ -2,41 +2,73 @@ const { Attendance, User } = require("../models");
 
 // --- Helper Functions ---
 
-// Convert any input (Date or string) to PKT safely
-const toPKT = (input) => {
-  const date = new Date(input);
-  if (isNaN(date)) return null; // handle invalid dates
-  return new Date(date.getTime() + 5 * 60 * 60 * 1000);
+// Format date to 'YYYY-MM-DD' in UTC
+const formatDate = (date = new Date()) => {
+  return date.toISOString().split("T")[0];
 };
 
-// Format Date to 'YYYY-MM-DD' in PKT
-const formatDate = (input) => {
-  const pkt = toPKT(input);
-  return pkt ? pkt.toISOString().slice(0, 10) : null;
+// Format time to 'HH:MM:SS' in UTC
+const formatTime = (date = new Date()) => {
+  return date.toTimeString().split(" ")[0];
 };
 
-// Format Time to readable PKT time (e.g., '18:42:12')
-const formatTimePKT = (input) => {
-  const pkt = toPKT(input);
-  return pkt ? pkt.toTimeString().slice(0, 8) : null;
-};
-
-// Format Total Hours (e.g., "4h 30m")
+// Format total hours (e.g., "4h 30m")
 const formatHours = (hours) => {
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
   return `${h}h ${m}m`;
 };
 
+// Get today's attendance for the authenticated user
+const getTodaysAttendance = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = formatDate(new Date());
+
+    const attendance = await Attendance.findOne({
+      where: {
+        userId,
+        date: today,
+      },
+      attributes: ["date", "clockIn", "clockOut", "status"],
+    });
+
+    if (!attendance) {
+      return res.status(200).json({
+        date: today,
+        clockIn: null,
+        clockOut: null,
+        status: "absent",
+      });
+    }
+
+    // Format the response
+    const response = {
+      date: attendance.date,
+      clockIn: attendance.clockIn ? formatTime(attendance.clockIn) : null,
+      clockOut: attendance.clockOut ? formatTime(attendance.clockOut) : null,
+      status: attendance.status || "present",
+    };
+
+    return res.status(200).json(response);
+  } catch (error) {
+    console.error("Error fetching today's attendance:", error);
+    return res.status(500).json({
+      message: "Error fetching attendance",
+      error: error.message,
+    });
+  }
+};
+
 // --- Clock In ---
 const clockIn = async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const nowUTC = new Date();
-    const todayPKT = formatDate(nowUTC);
+    const userId = req.user.id;
+    const now = new Date();
+    const today = formatDate(now);
 
     const existing = await Attendance.findOne({
-      where: { userId, date: todayPKT },
+      where: { userId, date: today },
     });
 
     if (existing) {
@@ -45,8 +77,8 @@ const clockIn = async (req, res) => {
 
     const attendance = await Attendance.create({
       userId,
-      date: todayPKT,
-      clockIn: nowUTC,
+      date: today,
+      clockIn: now,
       status: "present",
     });
 
@@ -54,8 +86,8 @@ const clockIn = async (req, res) => {
       message: "Clock-in successful",
       attendance: {
         id: attendance.id,
-        date: todayPKT,
-        clockIn: formatTimePKT(nowUTC),
+        date: today,
+        clockIn: formatTime(now),
         status: attendance.status,
       },
     });
@@ -69,36 +101,41 @@ const clockIn = async (req, res) => {
 // --- Clock Out ---
 const clockOut = async (req, res) => {
   try {
-    const userId = req.user.userId;
-    const nowUTC = new Date();
-    const todayPKT = formatDate(nowUTC);
+    const userId = req.user.id;
+    const now = new Date();
+    const today = formatDate(now);
 
     const attendance = await Attendance.findOne({
-      where: { userId, date: todayPKT },
+      where: {
+        userId,
+        date: today,
+        clockOut: null,
+      },
     });
 
-    if (!attendance || attendance.clockOut) {
+    if (!attendance) {
       return res
         .status(400)
-        .json({ message: "Not clocked in or already clocked out" });
+        .json({ message: "No active clock-in found for today" });
     }
 
-    const workedMs = toPKT(nowUTC) - toPKT(attendance.clockIn);
-    const workedHours = workedMs / (1000 * 60 * 60);
+    // Calculate hours worked
+    const clockInTime = new Date(attendance.clockIn);
+    const hoursWorked = (now - clockInTime) / (1000 * 60 * 60);
 
-    attendance.clockOut = nowUTC;
-    attendance.totalHours = parseFloat(workedHours.toFixed(2));
-    await attendance.save();
+    await attendance.update({
+      clockOut: now,
+      totalHours: hoursWorked,
+    });
 
     return res.status(200).json({
       message: "Clock-out successful",
       attendance: {
         id: attendance.id,
-        date: todayPKT,
-        clockIn: formatTimePKT(attendance.clockIn),
-        clockOut: formatTimePKT(nowUTC),
-        totalHours: attendance.totalHours,
-        formattedHours: formatHours(attendance.totalHours),
+        date: today,
+        clockIn: formatTime(attendance.clockIn),
+        clockOut: formatTime(now),
+        totalHours: formatHours(hoursWorked),
         status: attendance.status,
       },
     });
@@ -154,4 +191,5 @@ module.exports = {
   clockIn,
   clockOut,
   getAllAttendance,
+  getTodaysAttendance,
 };
