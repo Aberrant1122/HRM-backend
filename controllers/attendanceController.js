@@ -1,15 +1,20 @@
 const { Attendance, User } = require("../models");
+const { Sequelize } = require("sequelize");
 
 // --- Helper Functions ---
 
 // Format date to 'YYYY-MM-DD' in UTC
-const formatDate = (date = new Date()) => {
-  return date.toISOString().split("T")[0];
+const formatDate = (date) => {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  return isNaN(d) ? date : d.toISOString().split("T")[0];
 };
 
 // Format time to 'HH:MM:SS' in UTC
-const formatTime = (date = new Date()) => {
-  return date.toTimeString().split(" ")[0];
+const formatTime = (date) => {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  return isNaN(d) ? date : d.toTimeString().split(" ")[0];
 };
 
 // Format total hours (e.g., "4h 30m")
@@ -19,38 +24,46 @@ const formatHours = (hours) => {
   return `${h}h ${m}m`;
 };
 
-// Get today's attendance for the authenticated user
-const getTodaysAttendance = async (req, res) => {
+const getAllUsersTodaysAttendance = async (req, res) => {
   try {
-    const userId = req.user.id;
-    const today = formatDate(new Date());
+    // Get date from query params or default to today
+    const selectedDate =
+      req.query.date || new Date().toISOString().split("T")[0];
 
-    const attendance = await Attendance.findOne({
+    // Find all attendance records for the selected date
+    const attendanceRecords = await Attendance.findAll({
       where: {
-        userId,
-        date: today,
+        date: selectedDate,
       },
-      attributes: ["date", "clockIn", "clockOut", "status"],
+      include: [
+        {
+          model: User,
+          attributes: ["id", "fullName", "email"],
+          as: "user",
+        },
+      ],
+      attributes: ["id", "date", "clockIn", "clockOut", "status"],
+      order: [["user", "fullName", "ASC"]],
     });
 
-    if (!attendance) {
-      return res.status(200).json({
-        date: today,
-        clockIn: null,
-        clockOut: null,
-        status: "absent",
-      });
-    }
-
     // Format the response
-    const response = {
-      date: attendance.date,
-      clockIn: attendance.clockIn ? formatTime(attendance.clockIn) : null,
-      clockOut: attendance.clockOut ? formatTime(attendance.clockOut) : null,
-      status: attendance.status || "present",
-    };
+    const formattedRecords = attendanceRecords.map((record) => ({
+      id: record.id,
+      userId: record.userId,
+      fullName: record.user?.fullName || "Unknown",
+      email: record.user?.email || "",
+      date: record.date,
+      clockIn: record.clockIn ? formatTime(record.clockIn) : null,
+      clockOut: record.clockOut ? formatTime(record.clockOut) : null,
+      status: record.status || "absent",
+    }));
 
-    return res.status(200).json(response);
+    return res.status(200).json({
+      success: true,
+      date: selectedDate,
+      count: formattedRecords.length,
+      data: formattedRecords,
+    });
   } catch (error) {
     console.error("Error fetching today's attendance:", error);
     return res.status(500).json({
@@ -160,22 +173,20 @@ const getAllAttendance = async (req, res) => {
       order: [["date", "DESC"]],
     });
 
-    const formatted = records.map((record) => {
-      return {
-        id: record.id,
-        userId: record.userId,
-        fullName: record.user?.fullName || "N/A",
-        email: record.user?.email || "N/A",
-        date: formatDate(record.date),
-        clockIn: formatTimePKT(record.clockIn),
-        clockOut: formatTimePKT(record.clockOut),
-        totalHours: record.totalHours,
-        formattedHours: record.totalHours
-          ? formatHours(record.totalHours)
-          : null,
-        status: record.status,
-      };
-    });
+    const formatted = records.map((record) => ({
+      id: record.id,
+      userId: record.userId,
+      fullName: record.user?.fullName || "N/A",
+      email: record.user?.email || "N/A",
+      date: record.date, // Return as stored in the database
+      clockIn: record.clockIn ? new Date(record.clockIn).toISOString() : null,
+      clockOut: record.clockOut
+        ? new Date(record.clockOut).toISOString()
+        : null,
+      totalHours: record.totalHours,
+      formattedHours: record.totalHours ? formatHours(record.totalHours) : null,
+      status: record.status || "present",
+    }));
 
     return res.status(200).json({ success: true, attendance: formatted });
   } catch (error) {
@@ -187,9 +198,180 @@ const getAllAttendance = async (req, res) => {
   }
 };
 
+// Get today's attendance for the authenticated user
+const getTodaysAttendance = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const today = new Date().toISOString().split('T')[0];
+
+    const attendance = await Attendance.findOne({
+      where: {
+        userId,
+        date: today
+      },
+      include: [
+        {
+          model: User,
+          attributes: ['id', 'fullName', 'email'],
+          as: 'user',
+        },
+      ],
+      attributes: ['id', 'date', 'clockIn', 'clockOut', 'status', 'totalHours'],
+    });
+
+    if (!attendance) {
+      return res.status(200).json({
+        success: true,
+        date: today,
+        clockIn: null,
+        clockOut: null,
+        totalHours: 0,
+        formattedHours: '0h 0m',
+        status: 'absent',
+        user: {
+          id: req.user.id,
+          fullName: req.user.fullName,
+          email: req.user.email
+        }
+      });
+    }
+
+    // Calculate hours if not already calculated
+    let totalHours = attendance.totalHours;
+    if (!totalHours && attendance.clockIn && attendance.clockOut) {
+      const msWorked = new Date(attendance.clockOut) - new Date(attendance.clockIn);
+      totalHours = msWorked / (1000 * 60 * 60); // Convert to hours
+    }
+
+    return res.status(200).json({
+      success: true,
+      id: attendance.id,
+      date: attendance.date,
+      clockIn: attendance.clockIn ? formatTime(attendance.clockIn) : null,
+      clockOut: attendance.clockOut ? formatTime(attendance.clockOut) : null,
+      totalHours: totalHours || 0,
+      formattedHours: totalHours ? formatHours(totalHours) : '0h 0m',
+      status: attendance.status || 'present',
+      user: {
+        id: attendance.user?.id || req.user.id,
+        fullName: attendance.user?.fullName || req.user.fullName,
+        email: attendance.user?.email || req.user.email
+      }
+    });
+  } catch (error) {
+    console.error("Error fetching today's attendance:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching attendance",
+      error: error.message,
+    });
+  }
+};
+
+// Get weekly attendance for the authenticated user
+const getWeeklyAttendance = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 6); // Last 7 days including today
+
+    // Format dates for query
+    const formatDateForQuery = (date) => date.toISOString().split('T')[0];
+    
+    // Generate all dates in the range to include days with no attendance
+    const allDates = [];
+    const currentDate = new Date(startDate);
+    while (currentDate <= endDate) {
+      allDates.push(formatDateForQuery(new Date(currentDate)));
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // Get attendance records for the date range
+    const attendanceRecords = await Attendance.findAll({
+      where: {
+        userId,
+        date: {
+          [Sequelize.Op.between]: [formatDateForQuery(startDate), formatDateForQuery(endDate)]
+        }
+      },
+      order: [['date', 'ASC']],
+      attributes: ['id', 'date', 'clockIn', 'clockOut', 'status', 'totalHours'],
+    });
+
+    // Create a map of date to attendance for easy lookup
+    const attendanceMap = new Map();
+    attendanceRecords.forEach(record => {
+      attendanceMap.set(record.date, record);
+    });
+
+    // Generate response with all dates in range
+    const weeklyData = allDates.map(date => {
+      const attendance = attendanceMap.get(date);
+      
+      if (!attendance) {
+        return {
+          date,
+          day: new Date(date).toLocaleDateString('en-US', { weekday: 'short' }),
+          status: 'absent',
+          clockIn: null,
+          clockOut: null,
+          totalHours: 0,
+          formattedHours: '0h 0m'
+        };
+      }
+
+      // Calculate hours if not already calculated
+      let totalHours = attendance.totalHours;
+      if (!totalHours && attendance.clockIn && attendance.clockOut) {
+        const msWorked = new Date(attendance.clockOut) - new Date(attendance.clockIn);
+        totalHours = msWorked / (1000 * 60 * 60);
+      }
+
+      return {
+        id: attendance.id,
+        date: attendance.date,
+        day: new Date(attendance.date).toLocaleDateString('en-US', { weekday: 'short' }),
+        status: attendance.status || 'present',
+        clockIn: attendance.clockIn ? formatTime(attendance.clockIn) : null,
+        clockOut: attendance.clockOut ? formatTime(attendance.clockOut) : null,
+        totalHours: totalHours || 0,
+        formattedHours: totalHours ? formatHours(totalHours) : '0h 0m'
+      };
+    });
+
+    // Calculate weekly summary
+    const summary = {
+      totalDays: weeklyData.length,
+      presentDays: weeklyData.filter(d => d.status === 'present').length,
+      absentDays: weeklyData.filter(d => d.status === 'absent').length,
+      totalHours: weeklyData.reduce((sum, day) => sum + (day.totalHours || 0), 0).toFixed(2)
+    };
+    summary.formattedTotalHours = formatHours(summary.totalHours);
+
+    return res.status(200).json({
+      success: true,
+      startDate: formatDateForQuery(startDate),
+      endDate: formatDateForQuery(endDate),
+      summary,
+      data: weeklyData
+    });
+
+  } catch (error) {
+    console.error("Error fetching weekly attendance:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching weekly attendance",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   clockIn,
   clockOut,
   getAllAttendance,
+  getAllUsersTodaysAttendance,
   getTodaysAttendance,
+  getWeeklyAttendance,
 };
