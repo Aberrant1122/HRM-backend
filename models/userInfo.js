@@ -1,10 +1,15 @@
-'use strict';
-const { Model } = require('sequelize');
+"use strict";
+const { Model } = require("sequelize");
 
 module.exports = (sequelize, DataTypes) => {
   class UserInfo extends Model {
     static associate(models) {
-      UserInfo.belongsTo(models.User, { foreignKey: 'userId', as: 'users', onDelete: 'CASCADE', onUpdate: 'CASCADE' });
+      UserInfo.belongsTo(models.User, {
+        foreignKey: "userId",
+        as: "users",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
     }
   }
 
@@ -14,69 +19,108 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.INTEGER,
         allowNull: false,
         references: {
-          model: 'users',
-          key: 'id'
-        }
+          model: "users",
+          key: "id",
+        },
       },
       contactNumber: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
       },
       address: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
       },
       joiningDate: {
         type: DataTypes.DATE,
-        allowNull: false
+        allowNull: false,
       },
       department: {
-        type: DataTypes.ENUM('development', 'design', 'seo', 'marketing', 'content writing'),
+        type: DataTypes.ENUM(
+          "development",
+          "design",
+          "seo",
+          "marketing",
+          "content writing"
+        ),
         allowNull: false,
-        defaultValue: 'development'
+        defaultValue: "development",
       },
       bankAccount: {
         type: DataTypes.STRING,
-        allowNull: false
+        allowNull: false,
       },
       probationEndDate: {
         type: DataTypes.DATE,
-        allowNull: false
+        allowNull: false,
       },
       cnic: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true
+        unique: true,
       },
       employmentStatus: {
-        type: DataTypes.ENUM('permanent', 'contract', 'internship', 'terminated', 'probation'),
+        type: DataTypes.ENUM(
+          "permanent",
+          "contract",
+          "internship",
+          "terminated",
+          "probation"
+        ),
         allowNull: false,
-        defaultValue: 'permanent'
+        defaultValue: "permanent",
       },
       salary: {
         type: DataTypes.FLOAT,
-        allowNull: false
+        allowNull: false,
       },
       designation: {
         type: DataTypes.ENUM(
-          'Developer', 'Manager', 'HR', 'Designer', 'QA', 'Support', 'Marketing Manager', 'Marketing Coordinator', 
-          'Digital Marketing Specialist', 'Brand Manager', 'Social Media Manager', 'Performance Marketing Manager', 
-          'Growth Marketer', 'SEO Analyst', 'SEO Manager', 'Technical SEO Specialist', 'Content Writer', 'Content Strategist', 
-          'Technical Writer', 'Blog Writer', 'Scriptwriter', 'Editorial Writer', 'Proofreader & Editor', 'Other'
+          "Developer",
+          "Manager",
+          "HR",
+          "Designer",
+          "QA",
+          "Support",
+          "Marketing Manager",
+          "Marketing Coordinator",
+          "Digital Marketing Specialist",
+          "Brand Manager",
+          "Social Media Manager",
+          "Performance Marketing Manager",
+          "Growth Marketer",
+          "SEO Analyst",
+          "SEO Manager",
+          "Technical SEO Specialist",
+          "Content Writer",
+          "Content Strategist",
+          "Technical Writer",
+          "Blog Writer",
+          "Scriptwriter",
+          "Editorial Writer",
+          "Proofreader & Editor",
+          "Other"
         ),
-        allowNull: false
+        allowNull: false,
       },
       team: {
-        type: DataTypes.ENUM('Royal Executive Limo (REL)', 'MTM', 'XCEL HVAC', 'Ankadiversify', 'ADS', 'Team C2'),
+        type: DataTypes.ENUM(
+          "Royal Executive Limo (REL)",
+          "MTM",
+          "XCEL HVAC",
+          "Ankadiversify",
+          "ADS",
+          "Team C2"
+        ),
         allowNull: false,
-        defaultValue: 'ADS'
-      }
+        defaultValue: "ADS",
+      },
     },
     {
       sequelize,
-      modelName: 'UserInfo',
-      tableName: 'userInfo',
-      timestamps: true
+      modelName: "UserInfo",
+      tableName: "userInfo",
+      timestamps: true,
     }
   );
 
