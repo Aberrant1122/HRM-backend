@@ -68,12 +68,20 @@ const inviteEmployee = async (req, res) => {
     return res.status(400).json({ errors: errors.array() });
   }
 
-  const { fullName, email, role, password, cnic, phoneNumber } = req.body;
+  const { fullName, email, role, password, cnic, contactNumber } = req.body;
+
+  // Start a transaction
+  const transaction = await User.sequelize.transaction();
 
   try {
     // Check if user already exists
-    const existingUser = await User.findOne({ where: { email } });
+    const existingUser = await User.findOne({
+      where: { email },
+      transaction,
+    });
+
     if (existingUser) {
+      await transaction.rollback();
       return res
         .status(400)
         .json({ message: "User with this email already exists" });
@@ -87,46 +95,62 @@ const inviteEmployee = async (req, res) => {
     const tempPassword = crypto.randomBytes(8).toString("hex");
     const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
-    const newUser = await User.create({
-      fullName,
-      email,
-      password: hashedPassword,
-      role,
-      resetToken,
-      resetTokenExpiry,
-      status: "inactive",
-    });
+    const newUser = await User.create(
+      {
+        fullName,
+        email,
+        password: hashedPassword,
+        role,
+        resetToken,
+        resetTokenExpiry,
+        status: "inactive",
+      },
+      { transaction }
+    );
 
     // Create UserInfo for the new user
-    await UserInfo.create({
-      userId: newUser.id,
-      cnic,
-      contactNumber: phoneNumber,
-      address: req.body.address || "",
-      joiningDate: req.body.joiningDate || new Date(),
-      department: req.body.department || "development",
-      bankAccount: req.body.bankAccount || "",
-      probationEndDate: req.body.probationEndDate || new Date(),
-      employmentStatus: req.body.employmentStatus || "permanent",
-      salary: req.body.salary || 0,
-      designation: req.body.designation || "Developer",
-      team: req.body.team || "ADS",
-    });
+    await UserInfo.create(
+      {
+        userId: newUser.id,
+        cnic: cnic || null,
+        contactNumber: contactNumber,
+        address: req.body.address || null,
+        department: req.body.department || "development",
+        probationEndDate: req.body.probationEndDate
+          ? new Date(req.body.probationEndDate)
+          : null,
+        employmentStatus: req.body.employmentStatus || "permanent",
+        salary: req.body.salary || 0,
+        position: req.body.position || req.body.designation || "Developer",
+        team: req.body.team || null,
+        reportingManager: req.body.reportingManager || null,
+        dob: req.body.dob ? new Date(req.body.dob) : null,
+        startDate: req.body.startDate ? new Date(req.body.startDate) : null,
+      },
+      { transaction }
+    );
 
-    // Send invitation email
-    const resetUrl = `${APP_URL}/set-password?token=${resetToken}`;
+    // If we got here, commit the transaction
+    await transaction.commit();
 
-    await transporter.sendMail({
-      to: email,
-      subject: "You have been invited to join our HRM system",
-      html: `
-        <p>Hello ${fullName},</p>
-        <p>You have been invited to join our HRM system as a ${role}.</p>
-        <p>Please click the following link to set your password and activate your account:</p>
-        <p><a href="${resetUrl}">Set Password</a></p>
-        <p>This link will expire in 24 hours.</p>
-      `,
-    });
+    // Send invitation email (outside of transaction)
+    try {
+      const resetUrl = `${APP_URL}/set-password?token=${resetToken}`;
+      await transporter.sendMail({
+        to: email,
+        subject: "You have been invited to join our HRM system",
+        html: `
+          <p>Hello ${fullName},</p>
+          <p>You have been invited to join our HRM system as a ${role}.</p>
+          <p>Please click the following link to set your password and activate your account:</p>
+          <p><a href="${resetUrl}">Set Password</a></p>
+          <p>This link will expire in 24 hours.</p>
+        `,
+      });
+    } catch (emailError) {
+      console.error("Failed to send email:", emailError);
+      // Don't fail the request if email fails
+    }
 
     return res.status(201).json({
       message: "Invitation sent successfully",
@@ -134,11 +158,39 @@ const inviteEmployee = async (req, res) => {
       resetToken, // Only for testing, remove in production
     });
   } catch (error) {
-    console.error("Error in register:", error);
+    // Rollback the transaction in case of error
+    if (transaction && transaction.finished !== "commit") {
+      await transaction.rollback();
+    }
 
+    console.error("Error in inviteEmployee:", error);
+
+    // Handle validation errors
+    if (
+      error.name === "SequelizeValidationError" ||
+      error.name === "SequelizeUniqueConstraintError"
+    ) {
+      const errors = error.errors.map((err) => ({
+        field: err.path,
+        message: err.message,
+        type: err.type,
+        value: err.value,
+      }));
+
+      return res.status(400).json({
+        message: "Validation Error",
+        errors: errors,
+      });
+    }
+
+    // For other types of errors
     return res.status(500).json({
       message: "Internal Server Error",
-      error: error.message, // Ensure error message is sent
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Something went wrong",
+      ...(process.env.NODE_ENV === "development" && { stack: error.stack }),
     });
   }
 };

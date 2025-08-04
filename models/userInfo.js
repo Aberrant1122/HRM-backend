@@ -29,9 +29,9 @@ module.exports = (sequelize, DataTypes) => {
       },
       address: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
-      joiningDate: {
+      startDate: {
         type: DataTypes.DATE,
         allowNull: false,
       },
@@ -46,13 +46,17 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
         defaultValue: "development",
       },
-      bankAccount: {
-        type: DataTypes.STRING,
-        allowNull: false,
-      },
       probationEndDate: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
+      },
+      dob: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      reportingManager: {
+        type: DataTypes.STRING,
+        allowNull: true,
       },
       cnic: {
         type: DataTypes.STRING,
@@ -74,33 +78,8 @@ module.exports = (sequelize, DataTypes) => {
         type: DataTypes.FLOAT,
         allowNull: false,
       },
-      designation: {
-        type: DataTypes.ENUM(
-          "Developer",
-          "Manager",
-          "HR",
-          "Designer",
-          "QA",
-          "Support",
-          "Marketing Manager",
-          "Marketing Coordinator",
-          "Digital Marketing Specialist",
-          "Brand Manager",
-          "Social Media Manager",
-          "Performance Marketing Manager",
-          "Growth Marketer",
-          "SEO Analyst",
-          "SEO Manager",
-          "Technical SEO Specialist",
-          "Content Writer",
-          "Content Strategist",
-          "Technical Writer",
-          "Blog Writer",
-          "Scriptwriter",
-          "Editorial Writer",
-          "Proofreader & Editor",
-          "Other"
-        ),
+      position: {
+        type: DataTypes.STRING,
         allowNull: false,
       },
       team: {
@@ -112,8 +91,8 @@ module.exports = (sequelize, DataTypes) => {
           "ADS",
           "Team C2"
         ),
-        allowNull: false,
-        defaultValue: "ADS",
+        allowNull: true,
+        defaultValue: null,
       },
     },
     {
