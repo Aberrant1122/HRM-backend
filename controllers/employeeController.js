@@ -1,17 +1,37 @@
-const { User, UserInfo } = require('../models'); // Import models from the main models file
-
+const { User, UserInfo } = require("../models");
 
 const getAllEmployeesWithUserInfo = async (req, res) => {
   try {
-    const employees = await User.findAll({
-      where: { role: 'employee' },
-      include: [{ model: UserInfo, as: 'userInfo' }]
-    });
+    const includeUserInfo = req.body.includeUserInfo !== Boolean(false);
 
-    return res.status(200).json({ success: true, data: employees });
+    const queryOptions = {
+      where: { role: "employee" },
+      ...(includeUserInfo && {
+        include: [
+          {
+            model: UserInfo,
+            as: "userInfo",
+            attributes: { exclude: ["id", "userId", "createdAt", "updatedAt"] },
+          },
+        ],
+      }),
+      attributes: { exclude: ["password", "resetToken", "resetTokenExpiry"] },
+    };
+
+    const employees = await User.findAll(queryOptions);
+
+    return res.status(200).json({
+      success: true,
+      data: employees,
+      meta: { includeUserInfo },
+    });
   } catch (error) {
-    console.error(error);
-    return res.status(500).json({ success: false, message: 'Server Error' });
+    console.error("Error fetching employees:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch employees",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
   }
 };
 
