@@ -10,7 +10,7 @@ const { authenticate } = require("../middleware/authMiddleware");
 const {
   handleValidationErrors,
 } = require("../middleware/validationMiddleware");
-const { bankInfoValidation } = require("../validations/bankInfoValidation");
+const { bankInfoValidation, updateBankInfoValidation } = require("../validations/bankInfoValidation");
 
 const router = express.Router();
 
@@ -59,7 +59,7 @@ router.post(
   addUserBankInfo
 );
 
-// Update bank details for a user
+// Update bank details for a user (partial updates allowed)
 router.put(
   "/:userId/update-bank-details",
   authenticate,
@@ -68,7 +68,7 @@ router.put(
       .isInt({ min: 1 })
       .withMessage("User ID must be a positive integer")
       .toInt(),
-    bankInfoValidation,
+    ...updateBankInfoValidation,
     handleValidationErrors,
   ],
   updateUserBankInfo
