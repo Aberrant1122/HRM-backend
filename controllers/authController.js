@@ -36,9 +36,17 @@ const validateLogin = [
 
 const validateSetPassword = [
   body("token").notEmpty().withMessage("Token is required"),
-  body("password")
+  body("newPassword")
     .isLength({ min: 6 })
     .withMessage("Password must be at least 6 characters long"),
+  body("confirmPassword")
+    .custom((value, { req }) => {
+      if (value !== req.body.newPassword) {
+        throw new Error("Passwords do not match");
+      }
+      return true;
+    })
+    .withMessage("Passwords do not match"),
 ];
 
 const validateRegister = [
@@ -297,7 +305,6 @@ const isAdmin = (req, res, next) => {
   next();
 };
 
-// Middleware to check if user has employee role
 // Register a new user
 const register = async (req, res) => {
   try {
@@ -359,7 +366,7 @@ const setPassword = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { token, password } = req.body;
+    const { token, newPassword } = req.body;
 
     // Find user by reset token and check if it's not expired
     const user = await User.findOne({
@@ -369,20 +376,25 @@ const setPassword = async (req, res) => {
       },
     });
 
+    if (user.status === "inactive") {
+      User.update({ status: "active" }, { where: { id: user.id } });
+    }
+
     if (!user) {
       return res.status(400).json({ message: "Invalid or expired token" });
     }
 
-    // Update user's password and clear reset token
-    user.password = password;
+    // Hash the new password before saving
+    // const salt = await bcrypt.genSalt(10);
+    user.password = newPassword;
     user.resetToken = null;
     user.resetTokenExpiry = null;
     await user.save();
 
-    res.status(200).json({ message: "Password updated successfully" });
+    return res.status(200).json({ message: "Password updated successfully" });
   } catch (error) {
     console.error("Error setting password:", error);
-    res.status(500).json({ message: "Error setting password" });
+    return res.status(500).json({ message: "Error setting password" });
   }
 };
 

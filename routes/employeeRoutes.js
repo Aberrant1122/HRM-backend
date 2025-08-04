@@ -5,16 +5,35 @@ const {
   addUserBankInfo,
   updateUserBankInfo,
   getUserBankDetails,
+  getUserById,
+  deactivateUser,
 } = require("../controllers/employeeController");
-const { authenticate } = require("../middleware/authMiddleware");
+const { authenticate, isAdmin } = require("../middleware/authMiddleware");
 const {
   handleValidationErrors,
 } = require("../middleware/validationMiddleware");
-const { bankInfoValidation, updateBankInfoValidation } = require("../validations/bankInfoValidation");
+const {
+  bankInfoValidation,
+  updateBankInfoValidation,
+} = require("../validations/bankInfoValidation");
 
 const router = express.Router();
 
 // Routes
+
+// Get a specific user's information
+router.get(
+  "/:userId/user-info",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    handleValidationErrors,
+  ],
+  getUserById
+);
 
 // Get all employees with optional user info
 router.get(
@@ -42,6 +61,21 @@ router.get(
     handleValidationErrors,
   ],
   getUserBankDetails
+);
+
+// Deactivate a user (admin only)
+router.delete(
+  "/:userId",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    handleValidationErrors,
+  ],
+  isAdmin, // Only admins can deactivate users
+  deactivateUser
 );
 
 // Create or add bank details for a user
