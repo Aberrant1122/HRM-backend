@@ -21,10 +21,9 @@ const router = express.Router();
 
 // Routes
 
-// Get a specific user's information
+// Get a specific user's information (public endpoint)
 router.get(
   "/:userId/user-info",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })

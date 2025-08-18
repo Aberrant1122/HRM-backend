@@ -283,7 +283,7 @@ const getUserById = async (req, res) => {
           model: UserInfo,
           as: "userInfo",
           attributes: { exclude: ["id", "userId", "createdAt", "updatedAt"] },
-          required: false, // Make this a LEFT JOIN to include users without UserInfo
+          required: false,
         },
       ],
     });
@@ -295,9 +295,22 @@ const getUserById = async (req, res) => {
       });
     }
 
+    // Format the response with user and personal info
+    const responseData = {
+      id: user.id,
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      status: user.status,
+      lastLogin: user.lastLogin,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      ...(user.userInfo && { personalInfo: user.userInfo }),
+    };
+
     return res.status(200).json({
       success: true,
-      data: user,
+      data: responseData,
     });
   } catch (error) {
     console.error("Error fetching user:", error);
