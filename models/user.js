@@ -18,10 +18,16 @@ module.exports = (sequelize, DataTypes) => {
         onUpdate: "CASCADE",
       });
 
-      // User has many Attendance records
       User.hasMany(models.Attendance, {
         foreignKey: "userId",
         as: "attendances",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      User.hasOne(models.UserBankInfo, {
+        foreignKey: "userId",
+        as: "bankInfo",
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
       });
