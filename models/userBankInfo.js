@@ -66,7 +66,6 @@ module.exports = (sequelize, DataTypes) => {
       IBAN: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
         validate: {
           notEmpty: { msg: "IBAN is required" },
           is: {
@@ -101,18 +100,7 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "UserBankInfo",
       tableName: "userBankInfo",
       timestamps: true,
-      indexes: [
-        {
-          unique: true,
-          fields: ["userId"],
-        },
-        {
-          fields: ["accountNumber"],
-        },
-        {
-          fields: ["IBAN"],
-        },
-      ],
+      // Indexes are managed by migrations to avoid duplication during sync
     }
   );
 
