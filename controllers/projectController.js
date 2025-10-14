@@ -397,18 +397,23 @@ class ProjectController {
       const { id } = req.params;
       const { status } = req.body;
 
+      console.log(`Changing project status - ID: ${id}, Status: ${status}`);
+
       const project = await Project.findOne({
         where: { id, isActive: true }
       });
 
       if (!project) {
+        console.log(`Project not found with ID: ${id}`);
         return res.status(404).json({
           success: false,
           message: 'Project not found'
         });
       }
 
+      console.log(`Found project: ${project.name}, current status: ${project.status}`);
       await project.changeStatus(status);
+      console.log(`Status changed successfully to: ${status}`);
 
       res.json({
         success: true,

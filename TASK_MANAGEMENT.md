@@ -28,13 +28,9 @@ The Task model includes the following fields:
 - **startDate**: Task start date
 - **completedDate**: Task completion date (auto-set when completed)
 - **estimatedHours**: Estimated time to complete
-- **actualHours**: Actual time spent
 - **assigneeId**: User assigned to the task
 - **projectId**: Project the task belongs to
 - **createdBy**: User who created the task
-- **tags**: Array of tags for categorization
-- **attachments**: Array of file attachments
-- **comments**: Array of task comments
 - **progress**: Task progress percentage (0-100)
 - **isActive**: Soft delete flag
 - **timestamps**: Created and updated timestamps
@@ -186,7 +182,7 @@ Authorization: Bearer <token>
 
 #### Create Project
 ```
-POST /api/projects
+POST /api/projects/create-project
 Content-Type: application/json
 Authorization: Bearer <token>
 
@@ -206,19 +202,19 @@ Authorization: Bearer <token>
 
 #### Get All Projects
 ```
-GET /api/projects?page=1&limit=10&status=active&priority=high&search=searchterm
+GET /api/projects/get-all-projectspriority=high&search=searchterm
 Authorization: Bearer <token>
 ```
 
 #### Get Project by ID
 ```
-GET /api/projects/:id
+GET /api/projects/get-project-by-id/:id
 Authorization: Bearer <token>
 ```
 
 #### Update Project
 ```
-PUT /api/projects/:id
+PUT /api/projects/update-project/:id
 Content-Type: application/json
 Authorization: Bearer <token>
 
@@ -230,13 +226,13 @@ Authorization: Bearer <token>
 
 #### Delete Project
 ```
-DELETE /api/projects/:id
+DELETE /api/projects/delete-project/:id
 Authorization: Bearer <token>
 ```
 
 #### Update Project Progress
 ```
-PUT /api/projects/:id/progress
+PUT /api/projects/update-project-progress/:id
 Content-Type: application/json
 Authorization: Bearer <token>
 
@@ -247,7 +243,7 @@ Authorization: Bearer <token>
 
 #### Change Project Status
 ```
-PUT /api/projects/:id/status
+PUT /api/projects/change-project-status/:id
 Content-Type: application/json
 Authorization: Bearer <token>
 
@@ -258,13 +254,13 @@ Authorization: Bearer <token>
 
 #### Get Projects by Manager
 ```
-GET /api/projects/manager/:managerId?page=1&limit=10
+GET /api/projects/get-project-by-manager/:managerId
 Authorization: Bearer <token>
 ```
 
 #### Get Project Statistics
 ```
-GET /api/projects/statistics
+GET /api/projects/project-statistics
 Authorization: Bearer <token>
 ```
 
@@ -324,7 +320,7 @@ npx sequelize-cli db:seed --seed 20250220000000-project-task-seed
 
 ### Creating a Task
 ```javascript
-const response = await fetch('/api/tasks', {
+const response = await fetch('/api/tasks/create-task', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -346,7 +342,7 @@ const task = await response.json();
 
 ### Updating Task Progress
 ```javascript
-const response = await fetch(`/api/tasks/${taskId}/progress`, {
+const response = await fetch(`/api/tasks/update-task-progress/:id`, {
   method: 'PUT',
   headers: {
     'Content-Type': 'application/json',
@@ -360,7 +356,7 @@ const response = await fetch(`/api/tasks/${taskId}/progress`, {
 
 ### Getting Tasks with Filters
 ```javascript
-const response = await fetch('/api/tasks?status=in-progress&priority=high&page=1&limit=20', {
+const response = await fetch('http://localhost:5001/api/tasks/all-tasks?status=in-progress&priority=high&page=1&limit=20', {
   headers: {
     'Authorization': `Bearer ${token}`
   }
@@ -403,13 +399,4 @@ Common HTTP status codes:
 - Efficient database queries with associations
 - JSON fields for flexible data storage
 
-## Future Enhancements
 
-- File upload for attachments
-- Real-time notifications
-- Task dependencies and subtasks
-- Time tracking integration
-- Advanced reporting and analytics
-- Email notifications
-- Calendar integration
-- Mobile app support
