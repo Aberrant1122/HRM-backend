@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const { Sequelize } = require("sequelize");
+const path = require("path");
 const cors = require("cors");
 const db = require("./models");
 const app = express();
@@ -16,6 +17,9 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use("/api", routes);
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Test Database Connection
 (async () => {

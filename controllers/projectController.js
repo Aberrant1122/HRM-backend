@@ -20,6 +20,32 @@ class ProjectController {
         attachments = []
       } = req.body;
 
+      // When using multipart/form-data, fields come as strings; coerce as needed
+      let normalizedTags = tags;
+      if (typeof normalizedTags === 'string') {
+        try {
+          normalizedTags = JSON.parse(normalizedTags);
+        } catch (_) {
+          normalizedTags = [];
+        }
+      }
+
+      // Parse attachments if they arrive as JSON string via multipart
+      let normalizedAttachments = attachments;
+      if (typeof normalizedAttachments === 'string') {
+        try {
+          normalizedAttachments = JSON.parse(normalizedAttachments);
+        } catch (_) {
+          normalizedAttachments = [];
+        }
+      }
+
+      // Handle file upload (single attachment)
+      let attachmentPath = null;
+      if (req.file && req.file.filename) {
+        attachmentPath = `/uploads/projects/${req.file.filename}`;
+      }
+
       // Validate required fields
       if (!name) {
         return res.status(400).json({
@@ -44,6 +70,47 @@ class ProjectController {
       //   });
       // }
 
+      // Normalize optional string fields that may come as empty strings
+      const normalizedClientEmail = clientEmail && String(clientEmail).trim() !== '' ? String(clientEmail).trim() : null;
+      const normalizedClientName = clientName && String(clientName).trim() !== '' ? String(clientName).trim() : null;
+
+      // Resolve managerId: use provided value or fall back to authenticated user
+      let resolvedManagerId = managerId;
+      const invalidManagerTokens = [undefined, null, '', 'null', 'undefined', 'NaN'];
+      if (invalidManagerTokens.includes(resolvedManagerId)) {
+        resolvedManagerId = undefined;
+      }
+      // Fall back to authenticated user id if available
+      if (!resolvedManagerId && req.user && (req.user.id || req.user.userId)) {
+        resolvedManagerId = req.user.id || req.user.userId;
+      }
+      // Coerce to integer if it's a string number
+      if (typeof resolvedManagerId === 'string' && resolvedManagerId.trim() !== '') {
+        const parsedId = parseInt(resolvedManagerId, 10);
+        resolvedManagerId = Number.isFinite(parsedId) ? parsedId : undefined;
+      }
+      // Ensure we never pass NaN to the DB
+      if (typeof resolvedManagerId === 'number' && !Number.isFinite(resolvedManagerId)) {
+        resolvedManagerId = undefined;
+      }
+
+      // As projects table has a foreign key on managerId, ensure we have a valid manager
+      if (!resolvedManagerId) {
+        return res.status(400).json({
+          success: false,
+          message: 'Unable to resolve project manager. Please select a manager or sign in again.'
+        });
+      }
+
+      // Verify manager exists to avoid FK errors
+      const managerExists = await User.findByPk(resolvedManagerId);
+      if (!managerExists) {
+        return res.status(400).json({
+          success: false,
+          message: 'Project manager not found'
+        });
+      }
+
       const project = await Project.create({
         name,
         description,
@@ -52,11 +119,12 @@ class ProjectController {
         startDate,
         endDate,
         budget,
-        managerId,
-        clientName,
-        clientEmail,
-        tags,
-        attachments
+        managerId: resolvedManagerId,
+        clientName: normalizedClientName,
+        clientEmail: normalizedClientEmail,
+        tags: normalizedTags,
+        attachment: attachmentPath,
+        attachments: normalizedAttachments
       });
 
       // Fetch the created project with associations

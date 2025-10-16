@@ -82,6 +82,10 @@ module.exports = (sequelize, DataTypes) => {
         isEmail: { msg: "Please provide a valid client email" }
       }
     },
+    attachment: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
     tags: {
       type: DataTypes.JSON,
       allowNull: true,

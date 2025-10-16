@@ -1,13 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const projectController = require('../controllers/projectController');
+const { upload } = require('../middleware/upload');
 const verifyToken = require('../middleware/verifyToken');
 
 // Apply authentication middleware to all routes
 router.use(verifyToken);
 
 // Project CRUD operations
-router.post('/create-project', projectController.createProject);
+router.post('/create-project', upload.single('attachment'), projectController.createProject);
 router.get('/get-all-projects', projectController.getAllProjects);
 router.get('/get-project-by-id/:id', projectController.getProjectById);
 router.put('/update-project/:id', projectController.updateProject);
