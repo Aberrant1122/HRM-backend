@@ -1,5 +1,15 @@
 require("dotenv").config();
 
+// Skip database configuration during build phase
+if (process.env.NODE_ENV === 'production' && process.argv.includes('build')) {
+  module.exports = {
+    development: {},
+    test: {},
+    production: {}
+  };
+  return;
+}
+
 // Resolve Railway / generic env vars
 const getBoolean = (val, def = false) => {
   if (val === undefined) return def;
@@ -52,11 +62,12 @@ module.exports = {
         dialect: 'mysql',
       };
     }
+    // Fallback configuration for when DATABASE_URL is not available (e.g., during build)
     return {
-      username: process.env.DB_USER || process.env.MYSQL_USER,
-      password: process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD,
-      database: process.env.DB_NAME || process.env.MYSQL_DATABASE,
-      host: process.env.DB_HOST || process.env.MYSQL_HOST,
+      username: process.env.DB_USER || process.env.MYSQL_USER || 'root',
+      password: process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD || '',
+      database: process.env.DB_NAME || process.env.MYSQL_DATABASE || 'hrm',
+      host: process.env.DB_HOST || process.env.MYSQL_HOST || 'localhost',
       port: process.env.DB_PORT || process.env.MYSQL_PORT || 3306,
       dialect: 'mysql',
     };
