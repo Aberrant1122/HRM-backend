@@ -7,6 +7,8 @@ const {
   getUserBankDetails,
   getUserById,
   deactivateUser,
+  addEmployeeAttachments,
+  removeEmployeeAttachment,
 } = require("../controllers/employeeController");
 const { authenticate, isAdmin } = require("../middleware/authMiddleware");
 const {
@@ -16,6 +18,7 @@ const {
   bankInfoValidation,
   updateBankInfoValidation,
 } = require("../validations/bankInfoValidation");
+const { uploadEmployeeAttachments } = require("../middleware/upload");
 
 const router = express.Router();
 
@@ -105,6 +108,38 @@ router.put(
     handleValidationErrors,
   ],
   updateUserBankInfo
+);
+
+// Upload attachments for an employee
+router.post(
+  "/:userId/attachments",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    handleValidationErrors,
+  ],
+  uploadEmployeeAttachments.array("attachments", 10), // Allow up to 10 files
+  addEmployeeAttachments
+);
+
+// Remove an attachment for an employee
+router.delete(
+  "/:userId/attachments/:attachmentId",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    param("attachmentId")
+      .notEmpty()
+      .withMessage("Attachment ID is required"),
+    handleValidationErrors,
+  ],
+  removeEmployeeAttachment
 );
 
 module.exports = router;
