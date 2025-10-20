@@ -24,7 +24,7 @@ const dbUrlConfig = DB_URL
           }
         : {},
     }
-  : null;
+  : {};
 
 module.exports = {
   development: {
