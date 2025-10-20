@@ -7,13 +7,13 @@ const getBoolean = (val, def = false) => {
   return s === "1" || s === "true" || s === "yes";
 };
 
-const DB_URL = process.env.DB_URL || process.env.DATABASE_URL || null;
+const DB_URL = process.env.DATABASE_URL || process.env.DB_URL || null;
 const DB_SSL = getBoolean(process.env.DB_SSL, false);
 
 // Common database URL configuration if provided
 const dbUrlConfig = DB_URL
   ? {
-      url: DB_URL,
+      use_env_variable: 'DATABASE_URL',
       dialect: "mysql",
       dialectOptions: DB_SSL
         ? {
@@ -45,21 +45,20 @@ module.exports = {
     port: process.env.TEST_DB_PORT || 3306,
     dialect: "mysql",
   },
-  production: {
-    ...dbUrlConfig,
-    username: process.env.DB_USER || process.env.MYSQLUSER,
-    password: process.env.DB_PASSWORD || process.env.MYSQLPASSWORD,
-    database: process.env.DB_NAME || process.env.MYSQLDATABASE,
-    host: process.env.DB_HOST || process.env.MYSQLHOST,
-    port: Number(process.env.DB_PORT || process.env.MYSQLPORT || 3306),
-    dialect: "mysql",
-    dialectOptions: DB_SSL
-      ? {
-          ssl: {
-            require: true,
-            rejectUnauthorized: false,
-          },
-        }
-      : {},
-  },
+  production: (() => {
+    if (process.env.DATABASE_URL) {
+      return {
+        use_env_variable: 'DATABASE_URL',
+        dialect: 'mysql',
+      };
+    }
+    return {
+      username: process.env.DB_USER || process.env.MYSQL_USER,
+      password: process.env.DB_PASSWORD || process.env.MYSQL_PASSWORD,
+      database: process.env.DB_NAME || process.env.MYSQL_DATABASE,
+      host: process.env.DB_HOST || process.env.MYSQL_HOST,
+      port: process.env.DB_PORT || process.env.MYSQL_PORT || 3306,
+      dialect: 'mysql',
+    };
+  })(),
 };
