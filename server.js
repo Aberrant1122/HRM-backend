@@ -1,6 +1,7 @@
 require("dotenv").config();
 const express = require("express");
 const { Sequelize } = require("sequelize");
+const path = require("path");
 const cors = require("cors");
 const db = require("./models");
 const app = express();
@@ -8,9 +9,17 @@ const PORT = process.env.PORT || 5001;
 const routes = require("./routes"); // Import routes from routes/index.js
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
 app.use(express.json());
 app.use("/api", routes);
+
+// Serve uploaded files statically
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Test Database Connection
 (async () => {

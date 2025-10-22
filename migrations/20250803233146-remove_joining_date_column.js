@@ -3,13 +3,18 @@
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // First, copy data from joiningDate to startDate for existing records
-    await queryInterface.sequelize.query(
-      'UPDATE userInfo SET startDate = joiningDate WHERE startDate IS NULL;'
-    );
+    const tableDescription = await queryInterface.describeTable('userInfo');
 
-    // Then remove the joiningDate column
-    await queryInterface.removeColumn('userInfo', 'joiningDate');
+    // Check if joiningDate column exists
+    if (tableDescription.joiningDate) {
+      // First, copy data from joiningDate to startDate for existing records
+      await queryInterface.sequelize.query(
+        'UPDATE userInfo SET startDate = joiningDate WHERE startDate IS NULL;'
+      );
+
+      // Then remove the joiningDate column
+      await queryInterface.removeColumn('userInfo', 'joiningDate');
+    }
   },
 
   async down(queryInterface, Sequelize) {

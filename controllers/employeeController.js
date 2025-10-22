@@ -1,6 +1,7 @@
 const { User, UserInfo, UserBankInfo } = require("../models");
 const { Op } = require("sequelize");
 const { validationResult } = require("express-validator");
+const path = require("path");
 
 const getAllEmployeesWithUserInfo = async (req, res) => {
   try {
@@ -374,6 +375,159 @@ const deactivateUser = async (req, res) => {
   }
 };
 
+const addEmployeeAttachments = async (req, res) => {
+  const transaction = await UserInfo.sequelize.transaction();
+
+  try {
+    const { userId } = req.params;
+    const files = req.files;
+
+    // Check if user exists
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Find user info
+    let userInfo = await UserInfo.findOne({
+      where: { userId },
+      transaction,
+    });
+
+    if (!userInfo) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User information not found",
+      });
+    }
+
+    // Process uploaded files
+    const attachments = [];
+    if (files && files.length > 0) {
+      files.forEach((file) => {
+        attachments.push({
+          filename: file.filename,
+          originalName: file.originalname,
+          path: `/uploads/employees/${file.filename}`,
+          size: file.size,
+          mimetype: file.mimetype,
+          uploadedAt: new Date().toISOString(),
+        });
+      });
+    }
+
+    // Get existing attachments and add new ones
+    const existingAttachments = userInfo.attachments || [];
+    const updatedAttachments = [...existingAttachments, ...attachments];
+
+    // Update user info with new attachments
+    await userInfo.update(
+      { attachments: updatedAttachments },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "Attachments uploaded successfully",
+      data: {
+        attachments: updatedAttachments,
+        newAttachments: attachments,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Error uploading attachments:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload attachments",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+const removeEmployeeAttachment = async (req, res) => {
+  const transaction = await UserInfo.sequelize.transaction();
+
+  try {
+    const { userId, attachmentId } = req.params;
+
+    // Check if user exists
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Find user info
+    const userInfo = await UserInfo.findOne({
+      where: { userId },
+      transaction,
+    });
+
+    if (!userInfo) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User information not found",
+      });
+    }
+
+    const existingAttachments = userInfo.attachments || [];
+    const attachmentIndex = existingAttachments.findIndex(
+      (att) => att.filename === attachmentId
+    );
+
+    if (attachmentIndex === -1) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "Attachment not found",
+      });
+    }
+
+    // Remove attachment from array
+    const removedAttachment = existingAttachments[attachmentIndex];
+    existingAttachments.splice(attachmentIndex, 1);
+
+    // Update user info
+    await userInfo.update(
+      { attachments: existingAttachments },
+      { transaction }
+    );
+
+    await transaction.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "Attachment removed successfully",
+      data: {
+        removedAttachment,
+        remainingAttachments: existingAttachments,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Error removing attachment:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to remove attachment",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
 module.exports = {
   getAllEmployeesWithUserInfo,
   addUserBankInfo,
@@ -381,4 +535,6 @@ module.exports = {
   getUserBankDetails,
   getUserById,
   deactivateUser,
+  addEmployeeAttachments,
+  removeEmployeeAttachment,
 };
