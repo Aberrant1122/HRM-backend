@@ -10,7 +10,7 @@ const routes = require("./routes"); // Import routes from routes/index.js
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000','human-resource-management-production-c64e.up.railway.app'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -25,11 +25,13 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 (async () => {
   try {
     await db.sequelize.authenticate();
-    console.log("Connected to MySQL database: hrm");
+    console.log("✅ Connected to MySQL database: hrm");
+    app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server running on port ${PORT}`));
   } catch (error) {
-    console.error("Database connection failed:", error);
+    console.error("❌ Database connection failed:", error);
   }
 })();
+
 
 // Health Check Endpoint
 app.get('/', (req, res) => {
@@ -37,6 +39,6 @@ app.get('/', (req, res) => {
 });
 
 // Start Express Server
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on http://localhost:${PORT}`);
 });
