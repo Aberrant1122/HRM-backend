@@ -31,12 +31,12 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
   }
 })();
 
-// Simple Route for Testing
-app.get("/", (req, res) => {
-  res.send("API is running...");
+// Health Check Endpoint
+app.get('/', (req, res) => {
+  res.status(200).send('Healthy');
 });
 
 // Start Express Server
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
 });
