@@ -1,0 +1,9 @@
+{
+  "services": {
+    "hrm-backend": {
+      "healthcheck": {
+        "disabled": true
+      }
+    }
+  }
+}
