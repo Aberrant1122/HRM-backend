@@ -22,15 +22,6 @@ app.use("/api", routes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Test Database Connection
-(async () => {
-  try {
-    await db.sequelize.authenticate();
-    console.log("✅ Connected to MySQL database: hrm");
-    app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server running on port ${PORT}`));
-  } catch (error) {
-    console.error("❌ Database connection failed:", error);
-  }
-})();
 
 
 // Health Check Endpoint
@@ -40,3 +31,12 @@ app.get('/', (req, res) => {
 
 // Start Express Server
 
+(async () => {
+  try {
+    await db.sequelize.authenticate();
+    console.log("✅ Connected to MySQL database: hrm");
+    app.listen(PORT, '0.0.0.0', () => console.log(`✅ Server running on port ${PORT}`));
+  } catch (error) {
+    console.error("❌ Database connection failed:", error);
+  }
+})();
