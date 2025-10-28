@@ -142,4 +142,21 @@ router.delete(
   removeEmployeeAttachment
 );
 
+// Download employee attachment
+router.get(
+  "/:userId/download-attachment/:attachmentId",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    param("attachmentId")
+      .notEmpty()
+      .withMessage("Attachment ID is required"),
+    handleValidationErrors,
+  ],
+  require("../controllers/employeeController").downloadEmployeeAttachment
+);
+
 module.exports = router;

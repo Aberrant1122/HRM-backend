@@ -1,5 +1,83 @@
 const { Project, User, Task } = require('../models');
 const { Op } = require('sequelize');
+const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
+const { URL } = require('url');
+
+// S3 client for generating read URLs
+const s3 = new S3Client({
+  region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
+  credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY ? {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+  } : undefined,
+  endpoint: process.env.AWS_S3_ENDPOINT || undefined,
+  forcePathStyle: String(process.env.AWS_S3_FORCE_PATH_STYLE || '').toLowerCase() === 'true'
+});
+
+const S3_BUCKET = process.env.AWS_S3_BUCKET;
+
+function extractS3KeyFromUrl(maybeUrl) {
+  try {
+    const u = new URL(maybeUrl);
+    // Virtual-hosted-style: https://bucket.s3.region.amazonaws.com/key
+    // Path-style or custom endpoint: https://endpoint/bucket/key
+    const hostParts = u.hostname.split('.');
+    if (S3_BUCKET && (hostParts[0] === S3_BUCKET || u.pathname.startsWith(`/${S3_BUCKET}/`))) {
+      if (u.pathname.startsWith(`/${S3_BUCKET}/`)) {
+        return u.pathname.substring(S3_BUCKET.length + 2);
+      }
+      return u.pathname.replace(/^\//, '');
+    }
+    // Fallback: if endpoint is provided and path contains bucket
+    if (process.env.AWS_S3_ENDPOINT) {
+      const parts = u.pathname.split('/').filter(Boolean);
+      if (parts[0] === S3_BUCKET) {
+        return parts.slice(1).join('/');
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function toReadableAttachmentUrl(stored) {
+  if (!stored) return null;
+  
+  const storedStr = String(stored);
+  
+  // Local file storage (legacy support for local uploads)
+  if (storedStr.startsWith('/uploads/')) {
+    return storedStr;
+  }
+  
+  // Normalize malformed URLs (e.g., https// -> https://)
+  let normalized = storedStr.replace(/^(https?)\/\//i, '$1://');
+  
+  // If it's already a full S3 URL (legacy data), extract the key
+  let s3Key = null;
+  if (/^https?:\/\//i.test(normalized)) {
+    // Try to extract S3 key from the URL
+    s3Key = extractS3KeyFromUrl(normalized);
+  } else {
+    // It's already a key (new format)
+    s3Key = normalized;
+  }
+  
+  // Generate pre-signed URL for the S3 key
+  if (s3Key && S3_BUCKET) {
+    try {
+      const cmd = new GetObjectCommand({ Bucket: S3_BUCKET, Key: s3Key });
+      // Generate URL valid for 5 minutes
+      return await getSignedUrl(s3, cmd, { expiresIn: 300 });
+    } catch (error) {
+      console.error('Error generating pre-signed URL:', error);
+      return null;
+    }
+  }
+  
+  // Fallback: return as-is
+  return normalized;
+}
 
 class ProjectController {
   // Create a new project
@@ -42,8 +120,13 @@ class ProjectController {
 
       // Handle file upload (single attachment)
       let attachmentPath = null;
-      if (req.file && req.file.filename) {
-        attachmentPath = `/uploads/projects/${req.file.filename}`;
+      if (req.file) {
+        // Prefer S3 location when available; fall back to local uploads path
+        if (req.file.location) {
+          attachmentPath = req.file.location;
+        } else if (req.file.filename) {
+          attachmentPath = `/uploads/projects/${req.file.filename}`;
+        }
       }
 
       // Validate required fields
@@ -138,10 +221,12 @@ class ProjectController {
         ]
       });
 
+      const attachmentUrl = await toReadableAttachmentUrl(createdProject.attachment);
+
       res.status(201).json({
         success: true,
         message: 'Project created successfully',
-        data: createdProject
+        data: { ...createdProject.get({ plain: true }), attachmentUrl }
       });
     } catch (error) {
       console.error('Error creating project:', error);
@@ -200,9 +285,15 @@ class ProjectController {
 
       const totalPages = Math.ceil(count / limit);
 
+      // Map attachment to readable URLs
+      const projectsWithUrls = await Promise.all(projects.map(async (p) => ({
+        ...p.get({ plain: true }),
+        attachmentUrl: await toReadableAttachmentUrl(p.attachment)
+      })));
+
       res.json({
         success: true,
-        data: projects,
+        data: projectsWithUrls,
         pagination: {
           currentPage: parseInt(page),
           totalPages,
@@ -256,9 +347,11 @@ class ProjectController {
         });
       }
 
+      const attachmentUrl = await toReadableAttachmentUrl(project.attachment);
+
       res.json({
         success: true,
-        data: project
+        data: { ...project.get({ plain: true }), attachmentUrl }
       });
     } catch (error) {
       console.error('Error fetching project:', error);
@@ -524,6 +617,83 @@ class ProjectController {
       res.status(500).json({
         success: false,
         message: 'Failed to fetch project statistics',
+        error: error.message
+      });
+    }
+  }
+
+  // Download project attachment
+  async downloadProjectAttachment(req, res) {
+    try {
+      const { id } = req.params;
+
+      const project = await Project.findOne({
+        where: { id, isActive: true }
+      });
+
+      if (!project) {
+        return res.status(404).json({
+          success: false,
+          message: 'Project not found'
+        });
+      }
+
+      if (!project.attachment) {
+        return res.status(404).json({
+          success: false,
+          message: 'No attachment found for this project'
+        });
+      }
+
+      // Check if user has access to this project (e.g., is manager or admin)
+      const userId = req.user.id || req.user.userId;
+      if (project.managerId !== userId && req.user.role !== 'admin') {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied'
+        });
+      }
+
+      // Extract S3 key from attachment path
+      let key = project.attachment;
+      if (key.startsWith('/uploads/')) {
+        // Local file - not supported for download
+        return res.status(400).json({
+          success: false,
+          message: 'Local file download not supported'
+        });
+      }
+
+      // If it's a URL, extract the key
+      if (key.startsWith('http')) {
+        key = extractS3KeyFromUrl(key);
+      }
+
+      if (!key || !S3_BUCKET) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid attachment path'
+        });
+      }
+
+      // Get object from S3
+      const { GetObjectCommand } = require('@aws-sdk/client-s3');
+      const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: key });
+      const response = await s3.send(command);
+
+      // Set headers for download
+      const filename = key.split('/').pop() || 'attachment';
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', response.ContentType || 'application/octet-stream');
+
+      // Stream the file
+      response.Body.pipe(res);
+
+    } catch (error) {
+      console.error('Error downloading project attachment:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to download attachment',
         error: error.message
       });
     }

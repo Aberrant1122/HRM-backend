@@ -410,10 +410,11 @@ const addEmployeeAttachments = async (req, res) => {
     const attachments = [];
     if (files && files.length > 0) {
       files.forEach((file) => {
+        const publicPath = file.location || (file.filename ? `/uploads/employees/${file.filename}` : null);
         attachments.push({
-          filename: file.filename,
+          filename: file.filename || path.basename(publicPath || ''),
           originalName: file.originalname,
-          path: `/uploads/employees/${file.filename}`,
+          path: publicPath,
           size: file.size,
           mimetype: file.mimetype,
           uploadedAt: new Date().toISOString(),
@@ -528,6 +529,131 @@ const removeEmployeeAttachment = async (req, res) => {
   }
 };
 
+const downloadEmployeeAttachment = async (req, res) => {
+  try {
+    const { userId, attachmentId } = req.params;
+
+    // Check if user exists
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Find user info
+    const userInfo = await UserInfo.findOne({
+      where: { userId },
+    });
+
+    if (!userInfo) {
+      return res.status(404).json({
+        success: false,
+        message: "User information not found",
+      });
+    }
+
+    const attachments = userInfo.attachments || [];
+    const attachment = attachments.find((att) => att.filename === attachmentId);
+
+    if (!attachment) {
+      return res.status(404).json({
+        success: false,
+        message: "Attachment not found",
+      });
+    }
+
+    // Check if current user has access (admin or the user themselves)
+    const currentUserId = req.user.id || req.user.userId;
+    if (currentUserId !== parseInt(userId) && req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    // Extract S3 key from attachment path
+    let key = attachment.path;
+    if (key.startsWith('/uploads/')) {
+      // Local file - not supported for download
+      return res.status(400).json({
+        success: false,
+        message: 'Local file download not supported'
+      });
+    }
+
+  // If it's a URL, extract the key
+  if (key.startsWith('http')) {
+    const { URL } = require('url');
+    try {
+      const u = new URL(key);
+      const hostParts = u.hostname.split('.');
+      const S3_BUCKET = process.env.AWS_S3_BUCKET;
+      if (S3_BUCKET && (hostParts[0] === S3_BUCKET || u.pathname.startsWith(`/${S3_BUCKET}/`))) {
+        if (u.pathname.startsWith(`/${S3_BUCKET}/`)) {
+          key = u.pathname.substring(S3_BUCKET.length + 2);
+        } else {
+          key = u.pathname.replace(/^\//, '');
+        }
+      }
+    } catch (_) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid attachment URL'
+      });
+    }
+  }
+
+  if (!key) {
+    return res.status(400).json({
+      success: false,
+      message: 'Invalid attachment path'
+    });
+  }
+
+  // Get S3 client
+  const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
+  const s3 = new S3Client({
+    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
+    credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY ? {
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    } : undefined,
+    endpoint: process.env.AWS_S3_ENDPOINT || undefined,
+    forcePathStyle: String(process.env.AWS_S3_FORCE_PATH_STYLE || '').toLowerCase() === 'true'
+  });
+
+  const S3_BUCKET = process.env.AWS_S3_BUCKET;
+  if (!S3_BUCKET) {
+    return res.status(500).json({
+      success: false,
+      message: 'S3 bucket not configured'
+    });
+  }
+
+  // Get object from S3
+  const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: key });
+  const response = await s3.send(command);
+
+  // Set headers for download
+  const filename = attachment.originalName || attachment.filename;
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+  res.setHeader('Content-Type', response.ContentType || attachment.mimetype || 'application/octet-stream');
+
+  // Stream the file
+  response.Body.pipe(res);
+
+  } catch (error) {
+    console.error("Error downloading employee attachment:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to download attachment",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
 module.exports = {
   getAllEmployeesWithUserInfo,
   addUserBankInfo,
@@ -537,4 +663,5 @@ module.exports = {
   deactivateUser,
   addEmployeeAttachments,
   removeEmployeeAttachment,
+  downloadEmployeeAttachment,
 };
