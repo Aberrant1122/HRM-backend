@@ -22,4 +22,7 @@ router.put('/change-project-status/:id', projectController.changeProjectStatus);
 router.get('/get-project-by-manager/:managerId', projectController.getProjectsByManager);
 router.get('/project-statistics', projectController.getProjectStatistics);
 
+// Download project attachment
+router.get('/download-attachment/:id', projectController.downloadProjectAttachment);
+
 module.exports = router;
