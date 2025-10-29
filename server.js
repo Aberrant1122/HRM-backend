@@ -10,7 +10,7 @@ const routes = require("./routes"); // Import routes from routes/index.js
 
 // Middleware
 app.use(cors({
-  origin: ['http://localhost:3000', 'http://127.0.0.1:3000','human-resource-management-production-c64e.up.railway.app'],
+  origin: ['http://localhost:3000', 'http://127.0.0.1:3000','https://hrm-backend-production-9e70.up.railway.app/'],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
