@@ -2,10 +2,16 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // Check if attachments column already exists
-    const tableDescription = await queryInterface.describeTable("userInfo");
+    // Safely handle case where table may not exist yet on fresh deploys
+    let tableDescription;
+    try {
+      tableDescription = await queryInterface.describeTable("userInfo");
+    } catch (err) {
+      // Table doesn't exist yet; skip this migration step gracefully
+      return;
+    }
+
     if (!tableDescription.attachments) {
-      // If team column exists, add after it, otherwise just add the column
       if (tableDescription.team) {
         await queryInterface.addColumn("userInfo", "attachments", {
           type: Sequelize.JSON,
@@ -24,7 +30,12 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    const tableDescription = await queryInterface.describeTable("userInfo");
+    let tableDescription;
+    try {
+      tableDescription = await queryInterface.describeTable("userInfo");
+    } catch (err) {
+      return;
+    }
     if (tableDescription.attachments) {
       await queryInterface.removeColumn("userInfo", "attachments");
     }
