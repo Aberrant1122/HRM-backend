@@ -71,7 +71,6 @@ const projectsStorage = multerS3({
 const employeesStorage = multerS3({
   s3,
   bucket,
-  contentType: multerS3.AUTO_CONTENT_TYPE,  acl: process.env.AWS_S3_ACL || 'public-read',
   metadata: function (req, file, cb) {
     cb(null, { fieldName: file.fieldname });
   },
