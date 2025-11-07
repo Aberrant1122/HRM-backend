@@ -96,6 +96,18 @@ module.exports = (sequelize, DataTypes) => {
         max: { args: [100], msg: 'Progress cannot exceed 100%' }
       }
     },
+    attachments: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      defaultValue: [],
+      validate: {
+        isArray(value) {
+          if (value && !Array.isArray(value)) {
+            throw new Error('Attachments must be an array');
+          }
+        }
+      }
+    },
     isActive: {
       type: DataTypes.BOOLEAN,
       defaultValue: true,
@@ -197,9 +209,13 @@ module.exports = (sequelize, DataTypes) => {
     throw new Error('Progress must be between 0 and 100');
   };
 
-  Task.prototype.assignToUser = function(userId) {
+  Task.prototype.assignToUser = async function(userId) {
+    const oldAssigneeId = this.assigneeId;
+
     this.assigneeId = userId;
-    return this.save();
+    await this.save();
+
+    return this;
   };
 
   Task.prototype.changeStatus = function(newStatus) {

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const taskController = require('../controllers/taskController');
 const verifyToken = require('../middleware/verifyToken');
+const { uploadTaskDeliverables } = require('../middleware/upload');
 
 // Apply authentication middleware to all routes
 router.use(verifyToken);
@@ -17,6 +18,9 @@ router.delete('/delete-task/:id', taskController.deleteTask);
 router.put('/update-task-progress/:id', taskController.updateTaskProgress);
 router.put('/change-task-status/:id', taskController.changeTaskStatus);
 router.put('/assign-task-to-user/:id', taskController.assignTaskToUser);
+
+// Task deliverables route
+router.post('/submit-deliverables/:id', uploadTaskDeliverables.array('files', 10), taskController.submitDeliverables);
 
 // Task queries
 router.get('/assignee/:assigneeId', taskController.getTasksByAssignee);

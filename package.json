@@ -41,7 +41,8 @@
     "nodemon": "^3.1.10",
     "npm": "^11.6.2",
     "sequelize": "^6.37.5",
-    "sequelize-cli": "^6.6.2"
+    "sequelize-cli": "^6.6.2",
+    "socket.io": "^4.8.1"
   },
   "devDependencies": {
     "@types/multer": "^2.0.0"

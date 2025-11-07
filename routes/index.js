@@ -4,6 +4,7 @@ const employeeRoutes = require("./employeeRoutes");
 const attendanceRoutes = require("./attendanceRoutes");
 const taskRoutes = require("./taskRoutes");
 const projectRoutes = require("./projectRoutes");
+const notificationRoutes = require("./notificationRoutes");
 
 const router = express.Router();
 
@@ -12,5 +13,6 @@ router.use("/employee", employeeRoutes);
 router.use("/attendance", attendanceRoutes);
 router.use("/tasks", taskRoutes);
 router.use("/projects", projectRoutes);
+router.use("/notifications", notificationRoutes);
 
 module.exports = router;

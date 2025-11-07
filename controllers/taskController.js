@@ -1,4 +1,4 @@
-const { Task, User, Project } = require('../models');
+const { Task, User, Project, Notification } = require('../models');
 const { Op } = require('sequelize');
 
 class TaskController {
@@ -84,6 +84,16 @@ class TaskController {
           }
         ]
       });
+
+      // Create a notification for the assignee
+      if (createdTask.assigneeId) {
+        await Notification.create({
+          message: `You have been assigned a new task: "${createdTask.title}"`,
+          isRead: false,
+          userId: createdTask.assigneeId,
+          taskId: createdTask.id,
+        });
+      }
 
       res.status(201).json({
         success: true,
@@ -242,6 +252,9 @@ class TaskController {
         });
       }
 
+      // Store the old assignee ID before updating
+      const oldAssigneeId = task.assigneeId;
+
       // Check if assignee exists
       if (updateData.assigneeId) {
         const assignee = await User.findByPk(updateData.assigneeId);
@@ -266,6 +279,27 @@ class TaskController {
 
       // Update the task
       await task.update(updateData);
+
+      // Create notification if assignee changed
+      if (updateData.assigneeId && updateData.assigneeId !== oldAssigneeId) {
+        try {
+          const notification = await Notification.create({
+            message: `You have been assigned a new task: "${task.title}"`,
+            isRead: false,
+            userId: updateData.assigneeId,
+            taskId: task.id,
+          });
+
+          // Emit socket event to the new assignee
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`user_${updateData.assigneeId}`).emit('notification', notification);
+          }
+        } catch (notificationError) {
+          console.error('Error creating notification:', notificationError);
+          // Don't fail the task update if notification creation fails
+        }
+      }
 
       // Fetch updated task with associations
       const updatedTask = await Task.findByPk(id, {
@@ -542,7 +576,31 @@ class TaskController {
         });
       }
 
+      // Store old assignee ID for notification logic
+      const oldAssigneeId = task.assigneeId;
+
       await task.assignToUser(assigneeId);
+
+      // Create notification if assignee changed
+      if (assigneeId && assigneeId !== oldAssigneeId) {
+        try {
+          const notification = await Notification.create({
+            message: `You have been assigned a new task: "${task.title}"`,
+            isRead: false,
+            userId: assigneeId,
+            taskId: task.id,
+          });
+
+          // Emit socket event to the new assignee
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`user_${assigneeId}`).emit('notification', notification);
+          }
+        } catch (notificationError) {
+          console.error('Error creating notification:', notificationError);
+          // Don't fail the task assignment if notification creation fails
+        }
+      }
 
       res.json({
         success: true,
@@ -609,6 +667,94 @@ class TaskController {
       res.status(500).json({
         success: false,
         message: 'Failed to fetch overdue tasks',
+        error: error.message
+      });
+    }
+  }
+
+  // Submit deliverables for a task
+  async submitDeliverables(req, res) {
+    try {
+      const { id } = req.params;
+      const { comment } = req.body;
+
+      const task = await Task.findOne({
+        where: { id, isActive: true }
+      });
+
+      if (!task) {
+        return res.status(404).json({
+          success: false,
+          message: 'Task not found'
+        });
+      }
+
+      // Check if user is the assignee
+      if (task.assigneeId !== req.user.id) {
+        return res.status(403).json({
+          success: false,
+          message: 'You are not authorized to submit deliverables for this task'
+        });
+      }
+
+      // Check if task is in progress or pending
+      if (task.status === 'completed') {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot submit deliverables for completed task'
+        });
+      }
+
+      const attachments = [];
+
+      // Process uploaded files
+      if (req.files && req.files.length > 0) {
+        req.files.forEach(file => {
+          attachments.push({
+            filename: file.originalname,
+            key: file.key,
+            url: file.location || `${process.env.AWS_S3_ENDPOINT || 'https://s3.amazonaws.com'}/${process.env.AWS_S3_BUCKET}/${file.key}`,
+            size: file.size,
+            mimetype: file.mimetype,
+            uploadedAt: new Date()
+          });
+        });
+      }
+
+      // Update task attachments
+      const currentAttachments = task.attachments || [];
+      const updatedAttachments = [...currentAttachments, ...attachments];
+
+      await task.update({
+        attachments: updatedAttachments,
+        status: 'completed', // Auto-complete task when deliverables are submitted
+        completedDate: new Date(),
+        progress: 100
+      });
+
+      // Create notification for task creator
+      if (task.createdBy) {
+        await Notification.create({
+          message: `Deliverables submitted for task: "${task.title}"`,
+          isRead: false,
+          userId: task.createdBy,
+          taskId: task.id,
+        });
+      }
+
+      res.json({
+        success: true,
+        message: 'Deliverables submitted successfully',
+        data: {
+          task: task,
+          attachments: attachments
+        }
+      });
+    } catch (error) {
+      console.error('Error submitting deliverables:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to submit deliverables',
         error: error.message
       });
     }
