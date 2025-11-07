@@ -22,6 +22,7 @@ if (!bucket) {
 
 const projectsPrefix = (process.env.AWS_S3_PROJECTS_PREFIX || 'projects/').replace(/^\//, '');
 const employeesPrefix = (process.env.AWS_S3_EMPLOYEES_PREFIX || 'employees/').replace(/^\//, '');
+const tasksPrefix = (process.env.AWS_S3_TASKS_PREFIX || 'tasks/').replace(/^\//, '');
 
 function generateSafeKey(prefix, originalName) {
   const timestamp = Date.now();
@@ -82,6 +83,21 @@ const employeesStorage = multerS3({
   }
 });
 
+const tasksStorage = multerS3({
+  s3,
+  bucket,
+  contentType: multerS3.AUTO_CONTENT_TYPE,
+  // acl: process.env.AWS_S3_ACL || 'public-read',
+  metadata: function (req, file, cb) {
+    cb(null, { fieldName: file.fieldname });
+  },
+  key: function (req, file, cb) {
+    const key = generateSafeKey(tasksPrefix, file.originalname);
+    file.filename = path.basename(key);
+    cb(null, key);
+  }
+});
+
 const upload = multer({
   storage: projectsStorage,
   fileFilter,
@@ -94,11 +110,19 @@ const uploadEmployeeAttachments = multer({
   limits: { fileSize: 20 * 1024 * 1024 }
 });
 
+const uploadTaskDeliverables = multer({
+  storage: tasksStorage,
+  fileFilter,
+  limits: { fileSize: 20 * 1024 * 1024 }
+});
+
 module.exports = {
   upload,
   uploadEmployeeAttachments,
+  uploadTaskDeliverables,
   // Keep exported names for compatibility; now represent S3 prefixes
   projectsUploadDir: projectsPrefix,
-  employeesUploadDir: employeesPrefix
+  employeesUploadDir: employeesPrefix,
+  tasksUploadDir: tasksPrefix
 };
 
