@@ -19,6 +19,9 @@ const io = socketIo(server, {
     origin: [
       "http://localhost:3000",
       "http://127.0.0.1:3000",
+      // Allow dev server running on port 3001 as well
+      "http://localhost:3001",
+      "http://127.0.0.1:3001",
       "https://human-resource-management-production-eeeb.up.railway.app"
     ],
     methods: ["GET", "POST"],
@@ -30,6 +33,9 @@ const io = socketIo(server, {
 const allowedOrigins = [
   "http://localhost:3000",
   "http://127.0.0.1:3000",
+  // Allow dev server running on port 3001 as well
+  "http://localhost:3001",
+  "http://127.0.0.1:3001",
   "https://human-resource-management-production-eeeb.up.railway.app"
 ];
 
