@@ -26,7 +26,7 @@ const transporter = nodemailer.createTransport({
 const validateInviteEmployee = [
   body("fullName").notEmpty().withMessage("Full name is required"),
   body("email").isEmail().withMessage("Valid email is required"),
-  body("role").isIn(["employee", "manager"]).withMessage("Invalid role"),
+  body("role").isIn(["employee", "manager", "client"]).withMessage("Invalid role"),
 ];
 
 const validateLogin = [
@@ -57,7 +57,7 @@ const validateRegister = [
     .withMessage("Password must be at least 6 characters long"),
   body("role")
     .optional()
-    .isIn(["admin", "employee"])
+    .isIn(["admin", "employee", "client"])
     .withMessage("Invalid role"),
 ];
 
@@ -358,6 +358,15 @@ const isEmployee = (req, res, next) => {
   next();
 };
 
+const isClient = (req, res, next) => {
+  if (req.user.role !== "client") {
+    return res
+      .status(403)
+      .json({ message: "Access denied. Client privileges required." });
+  }
+  next();
+};
+
 // Controller for setting a new password
 const setPassword = async (req, res) => {
   try {
@@ -456,6 +465,7 @@ module.exports = {
   isAuthenticated,
   isAdmin,
   isEmployee,
+  isClient,
   // For testing only
   _test: {
     transporter,

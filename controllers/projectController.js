@@ -92,8 +92,7 @@ class ProjectController {
         endDate,
         budget,
         managerId,
-        clientName,
-        clientEmail,
+        clientId,
         tags = [],
         attachments = []
       } = req.body;
@@ -153,9 +152,26 @@ class ProjectController {
       //   });
       // }
 
-      // Normalize optional string fields that may come as empty strings
-      const normalizedClientEmail = clientEmail && String(clientEmail).trim() !== '' ? String(clientEmail).trim() : null;
-      const normalizedClientName = clientName && String(clientName).trim() !== '' ? String(clientName).trim() : null;
+      // Handle client assignment
+      let clientName = null;
+      let clientEmail = null;
+      
+      if (clientId) {
+        // Verify client exists and get their information
+        const client = await User.findOne({
+          where: { id: clientId, role: 'client' }
+        });
+        
+        if (!client) {
+          return res.status(400).json({
+            success: false,
+            message: 'Client not found'
+          });
+        }
+        
+        clientName = client.fullName;
+        clientEmail = client.email;
+      }
 
       // Resolve managerId: use provided value or fall back to authenticated user
       let resolvedManagerId = managerId;
@@ -203,8 +219,8 @@ class ProjectController {
         endDate,
         budget,
         managerId: resolvedManagerId,
-        clientName: normalizedClientName,
-        clientEmail: normalizedClientEmail,
+        clientName: clientName,
+        clientEmail: clientEmail,
         tags: normalizedTags,
         attachment: attachmentPath,
         attachments: normalizedAttachments
@@ -506,6 +522,113 @@ class ProjectController {
       res.status(500).json({
         success: false,
         message: 'Failed to fetch projects by manager',
+        error: error.message
+      });
+    }
+  }
+
+  // Get projects by client email
+  async getProjectsByClient(req, res) {
+    try {
+      // Resolve authenticated client info robustly
+      const jwtUser = req.user || {};
+      const { page = 1, limit = 10 } = req.query;
+
+      // Fetch full user from DB to get reliable email/fullName
+      let clientRecord = null;
+      try {
+        if (jwtUser.id) {
+          clientRecord = await User.findByPk(jwtUser.id);
+        }
+        // Fallback to email lookup if id not present
+        if (!clientRecord && jwtUser.email) {
+          clientRecord = await User.findOne({ where: { email: jwtUser.email } });
+        }
+      } catch (e) {
+        // non-fatal; continue with whatever we have
+        console.warn('Unable to resolve client record from token:', e?.message || e);
+      }
+
+      const clientEmail = (clientRecord?.email || jwtUser.email || '').trim();
+      const clientName = (clientRecord?.fullName || '').trim();
+
+      const offset = (page - 1) * limit;
+
+      // Build a resilient where clause: match by email, or by name if email missing
+      const whereClause = { isActive: true };
+      const orConditions = [];
+      if (clientEmail) {
+        orConditions.push({ clientEmail: clientEmail });
+      }
+      if (clientName) {
+        orConditions.push({ clientName: clientName });
+      }
+      if (orConditions.length > 0) {
+        whereClause[Op.or] = orConditions;
+      } else {
+        // No identifiable info; return empty result to avoid leaking data
+        return res.json({
+          success: true,
+          data: [],
+          pagination: {
+            currentPage: parseInt(page),
+            totalPages: 0,
+            totalItems: 0,
+            itemsPerPage: parseInt(limit)
+          }
+        });
+      }
+
+      const { count, rows: projects } = await Project.findAndCountAll({
+        where: whereClause,
+        include: [
+          {
+            model: User,
+            as: 'manager',
+            attributes: ['id', 'fullName', 'email']
+          },
+          {
+            model: Task,
+            as: 'tasks',
+            where: { isActive: true },
+            required: false,
+            // Align with Task model: 'title' field, alias to 'name' for frontend
+            attributes: [
+              'id',
+              ['title', 'name'],
+              'status',
+              'progress'
+            ]
+          }
+        ],
+        order: [['createdAt', 'DESC']],
+        limit: parseInt(limit),
+        offset: parseInt(offset)
+      });
+
+      const totalPages = Math.ceil(count / limit);
+
+      // Map attachment to readable URLs
+      const projectsWithUrls = await Promise.all(projects.map(async (p) => ({
+        ...p.get({ plain: true }),
+        attachmentUrl: await toReadableAttachmentUrl(p.attachment)
+      })));
+
+      res.json({
+        success: true,
+        data: projectsWithUrls,
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages,
+          totalItems: count,
+          itemsPerPage: parseInt(limit)
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching projects by client:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch projects by client',
         error: error.message
       });
     }

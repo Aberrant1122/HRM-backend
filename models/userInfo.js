@@ -25,15 +25,19 @@ module.exports = (sequelize, DataTypes) => {
       },
       contactNumber: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
       address: {
         type: DataTypes.STRING,
         allowNull: true,
       },
+      companyName: {
+        type: DataTypes.STRING,
+        allowNull: true,
+      },
       startDate: {
         type: DataTypes.DATE,
-        allowNull: false,
+        allowNull: true,
       },
       department: {
         type: DataTypes.ENUM(
@@ -41,9 +45,10 @@ module.exports = (sequelize, DataTypes) => {
           "design",
           "seo",
           "marketing",
-          "content writing"
+          "content writing",
+          "client"
         ),
-        allowNull: false,
+        allowNull: true,
         defaultValue: "development",
       },
       probationEndDate: {
@@ -60,7 +65,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       cnic: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
         unique: true,
       },
       employmentStatus: {
@@ -69,18 +74,19 @@ module.exports = (sequelize, DataTypes) => {
           "contract",
           "internship",
           "terminated",
-          "probation"
+          "probation",
+          "client"
         ),
-        allowNull: false,
+        allowNull: true,
         defaultValue: "permanent",
       },
       salary: {
         type: DataTypes.FLOAT,
-        allowNull: false,
+        allowNull: true,
       },
       position: {
         type: DataTypes.STRING,
-        allowNull: false,
+        allowNull: true,
       },
       team: {
         type: DataTypes.ENUM(

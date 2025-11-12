@@ -25,4 +25,7 @@ router.get('/project-statistics', projectController.getProjectStatistics);
 // Download project attachment
 router.get('/download-attachment/:id', projectController.downloadProjectAttachment);
 
+// Client routes
+router.get('/get-projects-by-client', projectController.getProjectsByClient);
+
 module.exports = router;
