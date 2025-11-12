@@ -92,8 +92,9 @@ const addClient = async (req, res) => {
         contactNumber: contactNumber || null,
         address: address || null,
         companyName: companyName || null,
-        department: "client",
-        employmentStatus: "client",
+        // For client users, avoid employee-specific ENUM values that may not exist in DB
+        department: null,
+        employmentStatus: "permanent",
         position: "Client",
       },
       { transaction }
