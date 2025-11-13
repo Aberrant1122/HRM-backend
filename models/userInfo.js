@@ -83,6 +83,7 @@ module.exports = (sequelize, DataTypes) => {
       salary: {
         type: DataTypes.FLOAT,
         allowNull: true,
+        defaultValue: 0,
       },
       position: {
         type: DataTypes.STRING,
