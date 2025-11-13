@@ -94,7 +94,6 @@ const addClient = async (req, res) => {
         address: address || null,
         companyName: companyName || null,
         startDate: new Date(),
-        salary: salary || null,
         // Leave department undefined so DB default applies
         employmentStatus: "permanent",
         position: "Client",
