@@ -27,9 +27,10 @@ const validateAddClient = [
     .isLength({ min: 6 })
     .withMessage("Password must be at least 6 characters long"),
   body("contactNumber")
-    .optional()
-    .isMobilePhone()
-    .withMessage("Valid contact number is required"),
+    .trim()
+    .notEmpty()
+    .matches(/^[0-9+\-()\s]{7,20}$/)
+    .withMessage("Contact number must be 7–20 digits"),
   body("companyName").optional().trim(),
   body("address").optional().trim(),
 ];
@@ -44,7 +45,7 @@ const addClient = async (req, res) => {
   // Validate request
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    return res.status(400).json({ message: "Validation Error", errors: errors.array() });
   }
 
   const {
@@ -89,11 +90,10 @@ const addClient = async (req, res) => {
     await UserInfo.create(
       {
         userId: newClient.id,
-        contactNumber: contactNumber || null,
+        contactNumber,
         address: address || null,
         companyName: companyName || null,
-        // For client users, avoid employee-specific ENUM values that may not exist in DB
-        department: null,
+        // Leave department undefined so DB default applies
         employmentStatus: "permanent",
         position: "Client",
       },
