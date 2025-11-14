@@ -36,17 +36,23 @@ const allowedOrigins = [
   // Allow dev server running on port 3001 as well
   "http://localhost:3001",
   "http://127.0.0.1:3001",
-  "https://human-resource-management-production-eeeb.up.railway.app"
-];
+  // Deployed frontend URLs
+  "https://human-resource-management-production-eeeb.up.railway.app",
+  "https://human-resource-management-production-b7d0.up.railway.app",
+  process.env.FRONTEND_URL
+].filter(Boolean);
 
 app.use((req, res, next) => {
   const origin = req.headers.origin;
-  if (allowedOrigins.includes(origin)) {
+  if (origin && allowedOrigins.includes(origin)) {
     res.header("Access-Control-Allow-Origin", origin);
     res.header("Access-Control-Allow-Credentials", "true");
   }
   res.header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.header(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With"
+  );
   if (req.method === "OPTIONS") {
     return res.sendStatus(204);
   }
