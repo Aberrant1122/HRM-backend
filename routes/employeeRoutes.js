@@ -22,6 +22,7 @@ const {
   updateBankInfoValidation,
 } = require("../validations/bankInfoValidation");
 const { uploadEmployeeAttachments, uploadProfilePicture: uploadProfilePictureMiddleware } = require("../middleware/upload");
+const profileValidation = require("../validations/profileValidation");
 
 const router = express.Router();
 
@@ -171,6 +172,7 @@ router.put(
       .isInt({ min: 1 })
       .withMessage("User ID must be a positive integer")
       .toInt(),
+    ...profileValidation,
     handleValidationErrors,
   ],
   updateUserProfile

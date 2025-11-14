@@ -831,6 +831,8 @@ const updateUserProfile = async (req, res) => {
       reportingManager,
     } = req.body;
 
+    const parsedDob = dob !== undefined && dob !== null ? new Date(dob) : undefined;
+
     // Check if user exists
     const user = await User.findByPk(userId, { transaction });
     if (!user) {
@@ -870,7 +872,7 @@ const updateUserProfile = async (req, res) => {
         userId,
         contactNumber,
         address,
-        dob,
+        dob: parsedDob,
       };
       
       // Admins can set work information
@@ -888,7 +890,7 @@ const updateUserProfile = async (req, res) => {
       // Personal information - all users can update
       if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
       if (address !== undefined) updateData.address = address;
-      if (dob !== undefined) updateData.dob = dob;
+      if (parsedDob !== undefined) updateData.dob = parsedDob;
       
       // Work information - only admins can update
       if (isAdmin) {
