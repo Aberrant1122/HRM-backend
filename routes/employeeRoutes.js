@@ -9,6 +9,9 @@ const {
   deactivateUser,
   addEmployeeAttachments,
   removeEmployeeAttachment,
+  updateUserProfile,
+  uploadProfilePicture,
+  deleteProfilePicture,
 } = require("../controllers/employeeController");
 const { authenticate, isAdmin } = require("../middleware/authMiddleware");
 const {
@@ -18,7 +21,7 @@ const {
   bankInfoValidation,
   updateBankInfoValidation,
 } = require("../validations/bankInfoValidation");
-const { uploadEmployeeAttachments } = require("../middleware/upload");
+const { uploadEmployeeAttachments, uploadProfilePicture: uploadProfilePictureMiddleware } = require("../middleware/upload");
 
 const router = express.Router();
 
@@ -157,6 +160,49 @@ router.get(
     handleValidationErrors,
   ],
   require("../controllers/employeeController").downloadEmployeeAttachment
+);
+
+// Update user profile
+router.put(
+  "/:userId/profile",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    handleValidationErrors,
+  ],
+  updateUserProfile
+);
+
+// Upload profile picture
+router.post(
+  "/:userId/profile-picture",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    handleValidationErrors,
+  ],
+  uploadProfilePictureMiddleware.single("profilePicture"),
+  uploadProfilePicture
+);
+
+// Delete profile picture
+router.delete(
+  "/:userId/profile-picture",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    handleValidationErrors,
+  ],
+  deleteProfilePicture
 );
 
 module.exports = router;

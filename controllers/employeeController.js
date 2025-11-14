@@ -296,6 +296,21 @@ const getUserById = async (req, res) => {
       });
     }
 
+    // Generate signed URL for profile picture if it exists and is an S3 URL
+    let profilePictureUrl = user.profilePicture;
+    if (profilePictureUrl && profilePictureUrl.includes('s3')) {
+      try {
+        const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
+        const key = extractS3Key(profilePictureUrl);
+        if (key) {
+          profilePictureUrl = await getSignedUrlForObject(key, 86400); // 24 hours
+        }
+      } catch (error) {
+        console.error('Error generating signed URL for profile picture:', error);
+        // Keep the original URL if signed URL generation fails
+      }
+    }
+
     // Format the response with user and personal info
     const responseData = {
       id: user.id,
@@ -304,6 +319,7 @@ const getUserById = async (req, res) => {
       role: user.role,
       status: user.status,
       lastLogin: user.lastLogin,
+      profilePicture: profilePictureUrl,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
       ...(user.userInfo && { personalInfo: user.userInfo }),
@@ -654,6 +670,259 @@ const downloadEmployeeAttachment = async (req, res) => {
   }
 };
 
+const uploadProfilePicture = async (req, res) => {
+  const transaction = await User.sequelize.transaction();
+
+  try {
+    const { userId } = req.params;
+    const file = req.file;
+
+    if (!file) {
+      await transaction.rollback();
+      return res.status(400).json({
+        success: false,
+        message: "No file uploaded",
+      });
+    }
+
+    // Check if user exists
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check if current user has permission (admin or the user themselves)
+    const currentUserId = req.user.id || req.user.userId;
+    if (currentUserId !== parseInt(userId) && req.user.role !== "admin") {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    // Get the S3 URL
+    const profilePictureUrl = file.location || (file.filename ? `/uploads/profile-pictures/${file.filename}` : null);
+
+    // Update user's profile picture
+    await user.update({ profilePicture: profilePictureUrl }, { transaction });
+
+    await transaction.commit();
+
+    // Generate signed URL for the response if it's an S3 URL
+    let responseUrl = profilePictureUrl;
+    if (profilePictureUrl && profilePictureUrl.includes('s3')) {
+      try {
+        const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
+        const key = extractS3Key(profilePictureUrl);
+        if (key) {
+          responseUrl = await getSignedUrlForObject(key, 86400); // 24 hours
+        }
+      } catch (error) {
+        console.error('Error generating signed URL:', error);
+        // Keep the original URL if signed URL generation fails
+      }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile picture uploaded successfully",
+      data: {
+        profilePicture: responseUrl,
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Error uploading profile picture:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to upload profile picture",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+const deleteProfilePicture = async (req, res) => {
+  const transaction = await User.sequelize.transaction();
+
+  try {
+    const { userId } = req.params;
+
+    // Check if user exists
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check if current user has permission (admin or the user themselves)
+    const currentUserId = req.user.id || req.user.userId;
+    if (currentUserId !== parseInt(userId) && req.user.role !== "admin") {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    // Remove profile picture
+    await user.update({ profilePicture: null }, { transaction });
+
+    await transaction.commit();
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile picture removed successfully",
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Error removing profile picture:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to remove profile picture",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
+const updateUserProfile = async (req, res) => {
+  const transaction = await User.sequelize.transaction();
+
+  try {
+    const { userId } = req.params;
+    const {
+      fullName,
+      contactNumber,
+      address,
+      dob,
+      department,
+      position,
+      reportingManager,
+    } = req.body;
+
+    // Check if user exists
+    const user = await User.findByPk(userId, { transaction });
+    if (!user) {
+      await transaction.rollback();
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    // Check if current user has permission (admin or the user themselves)
+    const currentUserId = req.user.id || req.user.userId;
+    const isAdmin = req.user.role === "admin";
+    
+    if (currentUserId !== parseInt(userId) && !isAdmin) {
+      await transaction.rollback();
+      return res.status(403).json({
+        success: false,
+        message: "Access denied",
+      });
+    }
+
+    // Update user's full name if provided
+    if (fullName) {
+      await user.update({ fullName }, { transaction });
+    }
+
+    // Find or create user info
+    let userInfo = await UserInfo.findOne({
+      where: { userId },
+      transaction,
+    });
+
+    if (!userInfo) {
+      // Create new user info - only allow personal info for non-admins
+      const createData = {
+        userId,
+        contactNumber,
+        address,
+        dob,
+      };
+      
+      // Admins can set work information
+      if (isAdmin) {
+        if (department !== undefined) createData.department = department;
+        if (position !== undefined) createData.position = position;
+        if (reportingManager !== undefined) createData.reportingManager = reportingManager;
+      }
+      
+      userInfo = await UserInfo.create(createData, { transaction });
+    } else {
+      // Update only provided fields
+      const updateData = {};
+      
+      // Personal information - all users can update
+      if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
+      if (address !== undefined) updateData.address = address;
+      if (dob !== undefined) updateData.dob = dob;
+      
+      // Work information - only admins can update
+      if (isAdmin) {
+        if (department !== undefined) updateData.department = department;
+        if (position !== undefined) updateData.position = position;
+        if (reportingManager !== undefined) updateData.reportingManager = reportingManager;
+      }
+
+      await userInfo.update(updateData, { transaction });
+    }
+
+    await transaction.commit();
+
+    // Fetch updated user data
+    const updatedUser = await User.findOne({
+      where: { id: userId },
+      attributes: {
+        exclude: ["password", "resetPasswordToken", "resetPasswordExpires"],
+      },
+      include: [
+        {
+          model: UserInfo,
+          as: "userInfo",
+          attributes: { exclude: ["id", "userId", "createdAt", "updatedAt"] },
+        },
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully",
+      data: {
+        id: updatedUser.id,
+        fullName: updatedUser.fullName,
+        email: updatedUser.email,
+        role: updatedUser.role,
+        status: updatedUser.status,
+        lastLogin: updatedUser.lastLogin,
+        profilePicture: updatedUser.profilePicture,
+        createdAt: updatedUser.createdAt,
+        updatedAt: updatedUser.updatedAt,
+        ...(updatedUser.userInfo && { personalInfo: updatedUser.userInfo }),
+      },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    console.error("Error updating user profile:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Failed to update profile",
+      error: process.env.NODE_ENV === "development" ? error.message : undefined,
+    });
+  }
+};
+
 module.exports = {
   getAllEmployeesWithUserInfo,
   addUserBankInfo,
@@ -664,4 +933,7 @@ module.exports = {
   addEmployeeAttachments,
   removeEmployeeAttachment,
   downloadEmployeeAttachment,
+  updateUserProfile,
+  uploadProfilePicture,
+  deleteProfilePicture,
 };

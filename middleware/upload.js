@@ -23,6 +23,7 @@ if (!bucket) {
 const projectsPrefix = (process.env.AWS_S3_PROJECTS_PREFIX || 'projects/').replace(/^\//, '');
 const employeesPrefix = (process.env.AWS_S3_EMPLOYEES_PREFIX || 'employees/').replace(/^\//, '');
 const tasksPrefix = (process.env.AWS_S3_TASKS_PREFIX || 'tasks/').replace(/^\//, '');
+const profilePicturesPrefix = (process.env.AWS_S3_PROFILE_PICTURES_PREFIX || 'profile-pictures/').replace(/^\//, '');
 
 function generateSafeKey(prefix, originalName) {
   const timestamp = Date.now();
@@ -115,13 +116,52 @@ const uploadTaskDeliverables = multer({
   limits: { fileSize: 20 * 1024 * 1024 }
 });
 
+// Profile picture storage - only images allowed
+const profilePictureStorage = multerS3({
+  s3,
+  bucket,
+  contentType: multerS3.AUTO_CONTENT_TYPE,
+  acl: 'public-read', // Make profile pictures publicly accessible
+  metadata: function (req, file, cb) {
+    cb(null, { fieldName: file.fieldname });
+  },
+  key: function (req, file, cb) {
+    const key = generateSafeKey(profilePicturesPrefix, file.originalname);
+    file.filename = path.basename(key);
+    cb(null, key);
+  }
+});
+
+function profilePictureFilter(req, file, cb) {
+  const allowedImageTypes = [
+    'image/png',
+    'image/jpeg',
+    'image/jpg',
+    'image/gif',
+    'image/webp'
+  ];
+  if (allowedImageTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed for profile pictures'));
+  }
+}
+
+const uploadProfilePicture = multer({
+  storage: profilePictureStorage,
+  fileFilter: profilePictureFilter,
+  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit for profile pictures
+});
+
 module.exports = {
   upload,
   uploadEmployeeAttachments,
   uploadTaskDeliverables,
+  uploadProfilePicture,
   // Keep exported names for compatibility; now represent S3 prefixes
   projectsUploadDir: projectsPrefix,
   employeesUploadDir: employeesPrefix,
-  tasksUploadDir: tasksPrefix
+  tasksUploadDir: tasksPrefix,
+  profilePicturesUploadDir: profilePicturesPrefix
 };
 
