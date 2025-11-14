@@ -22,7 +22,7 @@ const io = socketIo(server, {
       // Allow dev server running on port 3001 as well
       "http://localhost:3001",
       "http://127.0.0.1:3001",
-      "https://human-resource-management-production-b7d0.up.railway.app"
+      process.env.FRONTEND_URL
     ],
     methods: ["GET", "POST"],
     credentials: true
