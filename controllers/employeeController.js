@@ -831,7 +831,7 @@ const updateUserProfile = async (req, res) => {
       reportingManager,
     } = req.body;
 
-    const parsedDob = dob !== undefined && dob !== null ? new Date(dob) : undefined;
+    const parsedDob = dob ? new Date(dob) : undefined;
 
     // Check if user exists
     const user = await User.findByPk(userId, { transaction });

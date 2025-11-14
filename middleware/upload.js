@@ -1,5 +1,6 @@
 require('dotenv').config();
 const path = require('path');
+const fs = require('fs');
 const multer = require('multer');
 const multerS3 = require('multer-s3');
 const { S3Client } = require('@aws-sdk/client-s3');
@@ -16,9 +17,6 @@ const s3 = new S3Client({
 });
 
 const bucket = process.env.AWS_S3_BUCKET;
-if (!bucket) {
-  throw new Error('AWS_S3_BUCKET is not set');
-}
 
 const projectsPrefix = (process.env.AWS_S3_PROJECTS_PREFIX || 'projects/').replace(/^\//, '');
 const employeesPrefix = (process.env.AWS_S3_EMPLOYEES_PREFIX || 'employees/').replace(/^\//, '');
@@ -117,20 +115,39 @@ const uploadTaskDeliverables = multer({
 });
 
 // Profile picture storage - only images allowed
-const profilePictureStorage = multerS3({
-  s3,
-  bucket,
-  contentType: multerS3.AUTO_CONTENT_TYPE,
-  acl: 'public-read', // Make profile pictures publicly accessible
-  metadata: function (req, file, cb) {
-    cb(null, { fieldName: file.fieldname });
-  },
-  key: function (req, file, cb) {
-    const key = generateSafeKey(profilePicturesPrefix, file.originalname);
-    file.filename = path.basename(key);
-    cb(null, key);
-  }
-});
+let profilePictureStorage;
+if (bucket) {
+  profilePictureStorage = multerS3({
+    s3,
+    bucket,
+    contentType: multerS3.AUTO_CONTENT_TYPE,
+    metadata: function (req, file, cb) {
+      cb(null, { fieldName: file.fieldname });
+    },
+    key: function (req, file, cb) {
+      const key = generateSafeKey(profilePicturesPrefix, file.originalname);
+      file.filename = path.basename(key);
+      cb(null, key);
+    }
+  });
+} else {
+  const localProfileDir = path.join(__dirname, '..', 'uploads', 'profile-pictures');
+  try {
+    fs.mkdirSync(localProfileDir, { recursive: true });
+  } catch (_) {}
+  profilePictureStorage = multer.diskStorage({
+    destination: function (req, file, cb) {
+      cb(null, localProfileDir);
+    },
+    filename: function (req, file, cb) {
+      const destName = generateSafeKey('', file.originalname);
+      const filename = path.basename(destName);
+      // expose filename to controller for building public path
+      file.filename = filename;
+      cb(null, filename);
+    }
+  });
+}
 
 function profilePictureFilter(req, file, cb) {
   const allowedImageTypes = [
@@ -150,7 +167,7 @@ function profilePictureFilter(req, file, cb) {
 const uploadProfilePicture = multer({
   storage: profilePictureStorage,
   fileFilter: profilePictureFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit for profile pictures
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
 module.exports = {

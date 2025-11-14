@@ -11,24 +11,33 @@ const allowedDepartments = [
 
 module.exports = [
   body("fullName")
-    .optional()
+    .optional({ nullable: true, checkFalsy: true })
     .isString()
     .isLength({ min: 2, max: 100 }),
-  body("contactNumber").optional().isString().isLength({ min: 7, max: 20 }),
-  body("address").optional().isString().isLength({ max: 255 }),
+  body("contactNumber")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .isLength({ min: 7, max: 20 }),
+  body("address")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .isLength({ max: 255 }),
   body("dob")
-    .optional()
+    .optional({ nullable: true, checkFalsy: true })
     .custom((v) => {
-      if (v === null) return true;
+      if (!v) return true;
       const d = new Date(v);
       return !isNaN(d.valueOf());
     }),
   body("department")
-    .optional()
+    .optional({ nullable: true, checkFalsy: true })
     .isIn(allowedDepartments),
-  body("position").optional().isString().isLength({ min: 2, max: 100 }),
+  body("position")
+    .optional({ nullable: true, checkFalsy: true })
+    .isString()
+    .isLength({ min: 2, max: 100 }),
   body("reportingManager")
-    .optional()
+    .optional({ nullable: true, checkFalsy: true })
     .isString()
     .isLength({ min: 2, max: 100 }),
 ];
