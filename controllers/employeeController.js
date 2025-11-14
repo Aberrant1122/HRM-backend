@@ -23,9 +23,31 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
 
     const employees = await User.findAll(queryOptions);
 
+    // Generate signed URLs for profile pictures if they exist
+    const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
+    const employeesWithSignedUrls = await Promise.all(
+      employees.map(async (employee) => {
+        const employeeData = employee.toJSON();
+        
+        if (employeeData.profilePicture && employeeData.profilePicture.includes('s3')) {
+          try {
+            const key = extractS3Key(employeeData.profilePicture);
+            if (key) {
+              employeeData.profilePicture = await getSignedUrlForObject(key, 86400); // 24 hours
+            }
+          } catch (error) {
+            console.error('Error generating signed URL for employee profile picture:', error);
+            // Keep the original URL if signed URL generation fails
+          }
+        }
+        
+        return employeeData;
+      })
+    );
+
     return res.status(200).json({
       success: true,
-      data: employees,
+      data: employeesWithSignedUrls,
       meta: { includeUserInfo },
     });
   } catch (error) {
