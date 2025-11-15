@@ -5,6 +5,7 @@ const {
   getClientById,
   updateClient,
   deleteClient,
+  changeClientPassword,
   validateAddClient,
 } = require("../controllers/clientController");
 const { isAuthenticated, isAdmin } = require("../controllers/authController");
@@ -21,5 +22,6 @@ router.get("/", getAllClients);
 router.get("/:id", getClientById);
 router.put("/:id", updateClient);
 router.delete("/:id", deleteClient);
+router.patch("/:id/password", changeClientPassword);
 
 module.exports = router;

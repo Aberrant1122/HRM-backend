@@ -1,5 +1,6 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const { Op } = require("sequelize");
 const { User, UserInfo } = require("../models");
 const { body, validationResult } = require("express-validator");
 const nodemailer = require("nodemailer");
@@ -294,6 +295,24 @@ const updateClient = async (req, res) => {
       return res.status(404).json({ message: "Client not found" });
     }
 
+    // Check if email is being changed and if it already exists
+    if (email && email !== client.email) {
+      const existingUser = await User.findOne({
+        where: { 
+          email: email,
+          id: { [Op.ne]: id } // Exclude current client
+        },
+        transaction,
+      });
+
+      if (existingUser) {
+        await transaction.rollback();
+        return res.status(400).json({ 
+          message: "Email address is already in use by another user" 
+        });
+      }
+    }
+
     // Update user data
     if (fullName) client.fullName = fullName;
     if (email) client.email = email;
@@ -327,8 +346,75 @@ const updateClient = async (req, res) => {
     }
 
     console.error("Error in updateClient:", error);
+
+    // Handle specific Sequelize errors
+    if (error.name === "SequelizeUniqueConstraintError") {
+      const field = error.errors[0]?.path || "field";
+      const fieldName = field === "email" ? "Email address" : field;
+      return res.status(400).json({
+        message: `${fieldName} is already in use by another user`,
+      });
+    }
+
+    if (error.name === "SequelizeValidationError") {
+      const errors = error.errors.map((err) => ({
+        field: err.path,
+        message: err.message,
+      }));
+      return res.status(400).json({
+        message: "Validation error",
+        errors,
+      });
+    }
+
     return res.status(500).json({
       message: "Error updating client",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Something went wrong",
+    });
+  }
+};
+
+// Controller for changing client password (Admin only)
+const changeClientPassword = async (req, res) => {
+  // Check if user is admin
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "Only admins can change client passwords" });
+  }
+
+  const { id } = req.params;
+  const { newPassword } = req.body;
+
+  // Validate password
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ 
+      message: "Password must be at least 6 characters long" 
+    });
+  }
+
+  try {
+    const client = await User.findOne({
+      where: { id, role: "client" },
+    });
+
+    if (!client) {
+      return res.status(404).json({ message: "Client not found" });
+    }
+
+    // Update password (will be hashed by the model hook)
+    client.password = newPassword;
+    client.passwordChangedAt = new Date();
+    await client.save();
+
+    return res.status(200).json({
+      message: "Client password updated successfully",
+    });
+  } catch (error) {
+    console.error("Error in changeClientPassword:", error);
+    return res.status(500).json({
+      message: "Error changing client password",
       error:
         process.env.NODE_ENV === "development"
           ? error.message
@@ -378,5 +464,6 @@ module.exports = {
   getClientById,
   updateClient,
   deleteClient,
+  changeClientPassword,
   validateAddClient,
 };

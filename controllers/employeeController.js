@@ -8,7 +8,7 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
     const includeUserInfo = req.body.includeUserInfo !== Boolean(false);
 
     const queryOptions = {
-      where: { role: "employee" },
+      where: { role: "employee" }, // Show all employees including inactive ones
       ...(includeUserInfo && {
         include: [
           {
@@ -378,36 +378,44 @@ const deactivateUser = async (req, res) => {
       });
     }
 
-    // Prevent deactivating the current user
+    // Prevent deleting the current user
     if (user.id === req.user.id) {
       await transaction.rollback();
       return res.status(400).json({
         success: false,
-        message: "You cannot deactivate your own account",
+        message: "You cannot delete your own account",
       });
     }
 
-    // Update user status to inactive
-    user.status = "inactive";
-    await user.save({ transaction });
+    // Check if user is an employee (only employees should be permanently deleted)
+    if (user.role === "employee") {
+      // Permanently delete the employee from database
+      await user.destroy({ transaction });
+      
+      await transaction.commit();
 
-    await transaction.commit();
+      return res.status(200).json({
+        success: true,
+        message: "Employee deleted successfully",
+      });
+    } else {
+      // For non-employees (like clients), just deactivate
+      user.status = "inactive";
+      await user.save({ transaction });
 
-    res.status(200).json({
-      success: true,
-      message: "User deactivated successfully",
-      data: {
-        userId: user.id,
-        status: user.status,
-        deactivatedAt: new Date(),
-      },
-    });
+      await transaction.commit();
+
+      return res.status(200).json({
+        success: true,
+        message: "User deactivated successfully",
+      });
+    }
   } catch (error) {
     await transaction.rollback();
-    console.error("Error deactivating user:", error);
+    console.error("Error deleting/deactivating user:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to deactivate user",
+      message: "Failed to delete user",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
@@ -823,6 +831,8 @@ const updateUserProfile = async (req, res) => {
     const { userId } = req.params;
     const {
       fullName,
+      email,
+      status,
       contactNumber,
       address,
       dob,
@@ -855,9 +865,33 @@ const updateUserProfile = async (req, res) => {
       });
     }
 
-    // Update user's full name if provided
-    if (fullName) {
-      await user.update({ fullName }, { transaction });
+    // Check if email is being changed and if it already exists (admin only)
+    if (isAdmin && email && email !== user.email) {
+      const existingUser = await User.findOne({
+        where: { 
+          email: email,
+          id: { [Op.ne]: userId } // Exclude current user
+        },
+        transaction,
+      });
+
+      if (existingUser) {
+        await transaction.rollback();
+        return res.status(400).json({ 
+          success: false,
+          message: "Email address is already in use by another user" 
+        });
+      }
+    }
+
+    // Update user's basic info
+    const userUpdateData = {};
+    if (fullName) userUpdateData.fullName = fullName;
+    if (isAdmin && email) userUpdateData.email = email;
+    if (isAdmin && status) userUpdateData.status = status;
+
+    if (Object.keys(userUpdateData).length > 0) {
+      await user.update(userUpdateData, { transaction });
     }
 
     // Find or create user info
@@ -947,6 +981,52 @@ const updateUserProfile = async (req, res) => {
   }
 };
 
+// Controller for changing employee password (Admin only)
+const changeEmployeePassword = async (req, res) => {
+  // Check if user is admin
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ message: "Only admins can change employee passwords" });
+  }
+
+  const { userId } = req.params;
+  const { newPassword } = req.body;
+
+  // Validate password
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ 
+      message: "Password must be at least 6 characters long" 
+    });
+  }
+
+  try {
+    const employee = await User.findOne({
+      where: { id: userId, role: "employee" },
+    });
+
+    if (!employee) {
+      return res.status(404).json({ message: "Employee not found" });
+    }
+
+    // Update password (will be hashed by the model hook)
+    employee.password = newPassword;
+    employee.passwordChangedAt = new Date();
+    await employee.save();
+
+    return res.status(200).json({
+      message: "Employee password updated successfully",
+    });
+  } catch (error) {
+    console.error("Error in changeEmployeePassword:", error);
+    return res.status(500).json({
+      message: "Error changing employee password",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Something went wrong",
+    });
+  }
+};
+
 module.exports = {
   getAllEmployeesWithUserInfo,
   addUserBankInfo,
@@ -960,4 +1040,5 @@ module.exports = {
   updateUserProfile,
   uploadProfilePicture,
   deleteProfilePicture,
+  changeEmployeePassword,
 };
