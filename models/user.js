@@ -75,13 +75,13 @@ module.exports = (sequelize, DataTypes) => {
         },
       },
       role: {
-        type: DataTypes.ENUM("admin", "employee", "client"),
+        type: DataTypes.ENUM("admin", "employee", "client", "manager"),
         allowNull: false,
         defaultValue: "employee",
         validate: {
           isIn: {
-            args: [["admin", "employee", "client"]],
-            msg: "Invalid role. Must be either admin, employee, or client.",
+            args: [["admin", "employee", "client", "manager"]],
+            msg: "Invalid role. Must be admin, employee, client, or manager.",
           },
         },
       },

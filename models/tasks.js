@@ -21,11 +21,11 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true,
     },
     status: {
-      type: DataTypes.ENUM('pending', 'in-progress', 'completed', 'blocked', 'cancelled'),
+      type: DataTypes.ENUM('pending', 'in-progress', 'in-review', 'completed', 'blocked', 'cancelled'),
       defaultValue: 'pending',
       validate: {
         isIn: {
-          args: [['pending', 'in-progress', 'completed', 'blocked', 'cancelled']],
+          args: [['pending', 'in-progress', 'in-review', 'completed', 'blocked', 'cancelled']],
           msg: 'Invalid status value'
         }
       }

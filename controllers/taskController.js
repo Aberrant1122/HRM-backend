@@ -1,4 +1,4 @@
-const { Task, User, Project, Notification } = require('../models');
+const { Task, User, Project, Notification, UserInfo } = require('../models');
 const { Op } = require('sequelize');
 
 class TaskController {
@@ -46,6 +46,24 @@ class TaskController {
             success: false,
             message: 'Project not found'
           });
+        }
+      }
+
+      // Authorization: admin, manager, or project manager
+      if (!(req.user.role === 'admin' || req.user.role === 'manager' || (projectId && (await Project.count({ where: { id: projectId, managerId: req.user.id } }))))) {
+        return res.status(403).json({ success: false, message: 'Access denied' });
+      }
+
+      // Manager department scope when assigning
+      if (req.user.role === 'manager' && assigneeId) {
+        const [managerInfo, assigneeInfo] = await Promise.all([
+          UserInfo.findOne({ where: { userId: req.user.id } }),
+          UserInfo.findOne({ where: { userId: assigneeId } }),
+        ]);
+        const mDept = (managerInfo?.department || '').toLowerCase();
+        const aDept = (assigneeInfo?.department || '').toLowerCase();
+        if (!mDept || !aDept || mDept !== aDept) {
+          return res.status(403).json({ success: false, message: "Assignee must be in manager's department" });
         }
       }
 
@@ -134,12 +152,32 @@ class TaskController {
       if (assigneeId) where.assigneeId = assigneeId;
       if (projectId) where.projectId = projectId;
 
-      // Search functionality
+      // Search functionality (keep separate to avoid being overwritten)
+      const searchOr = [];
       if (search) {
-        where[Op.or] = [
+        searchOr.push(
           { title: { [Op.like]: `%${search}%` } },
           { description: { [Op.like]: `%${search}%` } }
+        );
+      }
+
+      // Scope to projects managed by the current user (works for role 'manager' and project managers)
+      const projectsManaged = await Project.findAll({ where: { managerId: req.user.id }, attributes: ['id'] });
+      const managedProjectIds = projectsManaged.map(p => p.id);
+      const isAdmin = req.user.role === 'admin';
+      const isManager = req.user.role === 'manager';
+      if (!isAdmin && (isManager || managedProjectIds.length)) {
+        const scopeOr = [
+          ...(managedProjectIds.length ? [{ projectId: { [Op.in]: managedProjectIds } }] : []),
         ];
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({ [Op.or]: scopeOr });
+      }
+
+      // Apply search conditions if present
+      if (searchOr.length) {
+        where[Op.and] = where[Op.and] || [];
+        where[Op.and].push({ [Op.or]: searchOr });
       }
 
       const { count, rows: tasks } = await Task.findAndCountAll({
@@ -275,6 +313,12 @@ class TaskController {
             message: 'Project not found'
           });
         }
+      }
+
+      // Authorization: admin, manager, or project manager
+      const projectMgr = await Project.findOne({ where: { id: task.projectId, managerId: req.user.id } });
+      if (!(req.user.role === 'admin' || req.user.role === 'manager' || projectMgr)) {
+        return res.status(403).json({ success: false, message: 'Access denied' });
       }
 
       // Update the task
@@ -526,6 +570,11 @@ class TaskController {
         });
       }
 
+      const projMgr = await Project.findOne({ where: { id: task.projectId, managerId: req.user.id } });
+      const privileged = (req.user.role === 'admin' || req.user.role === 'manager' || projMgr);
+      if (status === 'completed' && !privileged) {
+        return res.status(403).json({ success: false, message: 'Only manager or admin can approve completion' });
+      }
       await task.changeStatus(status);
 
       res.json({
@@ -574,6 +623,25 @@ class TaskController {
           success: false,
           message: 'Task not found'
         });
+      }
+
+      // Authorization: admin, manager, or project manager
+      const projMgr = await Project.findOne({ where: { id: task.projectId, managerId: req.user.id } });
+      if (!(req.user.role === 'admin' || req.user.role === 'manager' || projMgr)) {
+        return res.status(403).json({ success: false, message: 'Access denied' });
+      }
+
+      // Manager department check
+      if (req.user.role === 'manager') {
+        const [managerInfo, assigneeInfo] = await Promise.all([
+          UserInfo.findOne({ where: { userId: req.user.id } }),
+          UserInfo.findOne({ where: { userId: assigneeId } }),
+        ]);
+        const mDept = (managerInfo?.department || '').toLowerCase();
+        const aDept = (assigneeInfo?.department || '').toLowerCase();
+        if (!mDept || !aDept || mDept !== aDept) {
+          return res.status(403).json({ success: false, message: "Assignee must be in manager's department" });
+        }
       }
 
       // Store old assignee ID for notification logic
@@ -727,8 +795,7 @@ class TaskController {
 
       await task.update({
         attachments: updatedAttachments,
-        status: 'completed', // Auto-complete task when deliverables are submitted
-        completedDate: new Date(),
+        status: 'in-review',
         progress: 100
       });
 
@@ -792,6 +859,76 @@ class TaskController {
       res.status(500).json({
         success: false,
         message: 'Failed to fetch task statistics',
+        error: error.message
+      });
+    }
+  }
+
+  // Get manager-specific task statistics (only tasks from projects they manage)
+  async getManagerTaskStatistics(req, res) {
+    try {
+      // Get all projects managed by this manager
+      const projectsManaged = await Project.findAll({
+        where: { managerId: req.user.id },
+        attributes: ['id']
+      });
+      const managedProjectIds = projectsManaged.map(p => p.id);
+
+      // If manager has no projects, return zeros
+      if (managedProjectIds.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            totalTasks: 0,
+            pendingTasks: 0,
+            inProgressTasks: 0,
+            completedTasks: 0,
+            overdueTasks: 0,
+            activeProjects: 0
+          }
+        });
+      }
+
+      // Count tasks only from manager's projects
+      const baseWhere = {
+        projectId: { [Op.in]: managedProjectIds },
+        isActive: true
+      };
+
+      const totalTasks = await Task.count({ where: baseWhere });
+      const pendingTasks = await Task.count({
+        where: { ...baseWhere, status: 'pending' }
+      });
+      const inProgressTasks = await Task.count({
+        where: { ...baseWhere, status: 'in-progress' }
+      });
+      const completedTasks = await Task.count({
+        where: { ...baseWhere, status: 'completed' }
+      });
+      const overdueTasks = await Task.count({
+        where: {
+          ...baseWhere,
+          dueDate: { [Op.lt]: new Date() },
+          status: { [Op.notIn]: ['completed', 'cancelled'] }
+        }
+      });
+
+      res.json({
+        success: true,
+        data: {
+          totalTasks,
+          pendingTasks,
+          inProgressTasks,
+          completedTasks,
+          overdueTasks,
+          activeProjects: managedProjectIds.length
+        }
+      });
+    } catch (error) {
+      console.error('Error fetching manager task statistics:', error);
+      res.status(500).json({
+        success: false,
+        message: 'Failed to fetch manager task statistics',
         error: error.message
       });
     }

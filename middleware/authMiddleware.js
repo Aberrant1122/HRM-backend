@@ -49,4 +49,22 @@ module.exports = {
   authenticate,
   authorizeRole,
   isAdmin,
+  isManager: (req, res, next) => {
+    if (req.user && req.user.role === "manager") {
+      return next();
+    }
+    return res.status(403).json({
+      success: false,
+      message: "Access denied: Manager privileges required",
+    });
+  },
+  isAdminOrManager: (req, res, next) => {
+    if (req.user && (req.user.role === "admin" || req.user.role === "manager")) {
+      return next();
+    }
+    return res.status(403).json({
+      success: false,
+      message: "Access denied: Admin or Manager privileges required",
+    });
+  },
 };

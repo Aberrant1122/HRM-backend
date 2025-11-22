@@ -27,5 +27,6 @@ router.get('/assignee/:assigneeId', taskController.getTasksByAssignee);
 router.get('/project/:projectId', taskController.getTasksByProject);
 router.get('/overdue', taskController.getOverdueTasks);
 router.get('/statistics', taskController.getTaskStatistics);
+router.get('/manager-statistics', taskController.getManagerTaskStatistics);
 
 module.exports = router;

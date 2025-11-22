@@ -13,6 +13,7 @@ const {
   uploadProfilePicture,
   deleteProfilePicture,
   changeEmployeePassword,
+  updateEmployeeRole,
 } = require("../controllers/employeeController");
 const { authenticate, isAdmin } = require("../middleware/authMiddleware");
 const {
@@ -221,6 +222,21 @@ router.patch(
     handleValidationErrors,
   ],
   changeEmployeePassword
+);
+
+// Update employee role (admin only)
+router.patch(
+  "/:userId/role",
+  authenticate,
+  isAdmin,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    handleValidationErrors,
+  ],
+  updateEmployeeRole
 );
 
 module.exports = router;

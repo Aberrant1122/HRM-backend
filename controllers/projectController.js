@@ -285,6 +285,11 @@ class ProjectController {
         ];
       }
 
+      // Restrict non-admins to only their managed projects
+      if (req.user.role !== 'admin') {
+        where.managerId = req.user.id;
+      }
+
       const { count, rows: projects } = await Project.findAndCountAll({
         where,
         include: [
@@ -292,6 +297,13 @@ class ProjectController {
             model: User,
             as: 'manager',
             attributes: ['id', 'fullName', 'email']
+          },
+          {
+            model: Task,
+            as: 'tasks',
+            where: { isActive: true },
+            required: false,
+            attributes: ['id', 'status']
           }
         ],
         order: [[sortBy, sortOrder.toUpperCase()]],
@@ -407,8 +419,28 @@ class ProjectController {
         }
       }
 
-      // Update the project
+      const previousManagerId = project.managerId;
       await project.update(updateData);
+
+      // Notify new manager if managerId changed
+      if (updateData.managerId && updateData.managerId !== previousManagerId) {
+        try {
+          await Notification.create({
+            message: `You have been assigned as manager for project: "${project.name}"`,
+            isRead: false,
+            userId: updateData.managerId,
+          });
+          const io = req.app.get('io');
+          if (io) {
+            io.to(`user_${updateData.managerId}`).emit('notification', {
+              message: `You have been assigned as manager for project: "${project.name}"`,
+              isRead: false,
+            });
+          }
+        } catch (e) {
+          console.error('Error notifying new manager:', e);
+        }
+      }
 
       // Fetch updated project with associations
       const updatedProject = await Project.findByPk(id, {

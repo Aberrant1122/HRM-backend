@@ -1027,6 +1027,83 @@ const changeEmployeePassword = async (req, res) => {
   }
 };
 
+// Controller for updating employee role (Admin only)
+const updateEmployeeRole = async (req, res) => {
+  // Check if user is admin
+  if (req.user.role !== "admin") {
+    return res.status(403).json({ 
+      success: false,
+      message: "Only admins can change employee roles" 
+    });
+  }
+
+  const { userId } = req.params;
+  const { role } = req.body;
+
+  // Validate role
+  const validRoles = ["admin", "employee", "client", "manager"];
+  if (!role || !validRoles.includes(role)) {
+    return res.status(400).json({ 
+      success: false,
+      message: "Invalid role. Must be one of: admin, employee, client, manager" 
+    });
+  }
+
+  try {
+    const employee = await User.findOne({
+      where: { id: userId },
+    });
+
+    if (!employee) {
+      return res.status(404).json({ 
+        success: false,
+        message: "Employee not found" 
+      });
+    }
+
+    // Prevent changing own role
+    if (parseInt(userId) === req.user.id) {
+      return res.status(400).json({
+        success: false,
+        message: "You cannot change your own role"
+      });
+    }
+
+    const oldRole = employee.role;
+
+    // Update role
+    await employee.update({ role });
+
+    // TODO: Send notification if role changed to manager
+    if (role === "manager" && oldRole !== "manager") {
+      // You can add notification logic here
+      console.log(`User ${employee.fullName} (ID: ${userId}) promoted to manager`);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Employee role updated successfully to ${role}`,
+      data: {
+        id: employee.id,
+        fullName: employee.fullName,
+        email: employee.email,
+        role: employee.role,
+        oldRole: oldRole,
+      }
+    });
+  } catch (error) {
+    console.error("Error in updateEmployeeRole:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error updating employee role",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Something went wrong",
+    });
+  }
+};
+
 module.exports = {
   getAllEmployeesWithUserInfo,
   addUserBankInfo,
@@ -1041,4 +1118,5 @@ module.exports = {
   uploadProfilePicture,
   deleteProfilePicture,
   changeEmployeePassword,
+  updateEmployeeRole,
 };
