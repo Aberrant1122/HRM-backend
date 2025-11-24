@@ -27,10 +27,20 @@ const formatHours = (hours) => {
 const getAllUsersTodaysAttendance = async (req, res) => {
   try {
     // Get date from query params or default to today
-    const selectedDate =
-      req.query.date || new Date().toISOString().split("T")[0];
+    const selectedDate = req.query.date || new Date().toISOString().split("T")[0];
 
-    // Find all attendance records for the selected date
+    console.log(`Fetching attendance for date: ${selectedDate}`);
+
+    // Get all users first
+    const allUsers = await User.findAll({
+      where: { role: 'employee' }, // Assuming you want only employees
+      attributes: ['id', 'fullName', 'email'],
+      raw: true
+    });
+
+    console.log(`Found ${allUsers.length} employees`);
+
+    // Get all attendance records for the selected date
     const attendanceRecords = await Attendance.findAll({
       where: {
         date: selectedDate,
@@ -40,23 +50,40 @@ const getAllUsersTodaysAttendance = async (req, res) => {
           model: User,
           attributes: ["id", "fullName", "email"],
           as: "user",
+          required: false
         },
       ],
-      attributes: ["id", "date", "clockIn", "clockOut", "status"],
-      order: [["user", "fullName", "ASC"]],
+      attributes: ["id", "userId", "date", "clockIn", "clockOut", "status"],
+      raw: true,
+      nest: true
     });
 
-    // Format the response
-    const formattedRecords = attendanceRecords.map((record) => ({
-      id: record.id,
-      userId: record.userId,
-      fullName: record.user?.fullName || "Unknown",
-      email: record.user?.email || "",
-      date: record.date,
-      clockIn: record.clockIn ? formatTime(record.clockIn) : null,
-      clockOut: record.clockOut ? formatTime(record.clockOut) : null,
-      status: record.status || "absent",
-    }));
+    console.log(`Found ${attendanceRecords.length} attendance records for ${selectedDate}`);
+
+    // Create a map of userId to attendance record for quick lookup
+    const attendanceMap = new Map();
+    attendanceRecords.forEach(record => {
+      attendanceMap.set(record.userId, record);
+      console.log(`Attendance record for user ${record.userId}: clockIn=${record.clockIn}, clockOut=${record.clockOut}, status=${record.status}`);
+    });
+
+    // Merge all users with their attendance records
+    const formattedRecords = allUsers.map(user => {
+      const attendance = attendanceMap.get(user.id);
+      
+      return {
+        id: attendance?.id || null,
+        userId: user.id,
+        fullName: user.fullName || "Unknown",
+        email: user.email || "",
+        date: selectedDate,
+        clockIn: attendance?.clockIn ? formatTime(attendance.clockIn) : null,
+        clockOut: attendance?.clockOut ? formatTime(attendance.clockOut) : null,
+        status: attendance?.status || "absent",
+      };
+    });
+
+    console.log(`Returning ${formattedRecords.length} formatted records`);
 
     return res.status(200).json({
       success: true,
@@ -80,11 +107,14 @@ const clockIn = async (req, res) => {
     const now = new Date();
     const today = formatDate(now);
 
+    console.log(`Clock-in attempt - User ID: ${userId}, Date: ${today}, Time: ${now.toISOString()}`);
+
     const existing = await Attendance.findOne({
       where: { userId, date: today },
     });
 
     if (existing) {
+      console.log(`User ${userId} already clocked in for ${today}`);
       return res.status(400).json({ message: "Already clocked in for today" });
     }
 
@@ -94,6 +124,8 @@ const clockIn = async (req, res) => {
       clockIn: now,
       status: "present",
     });
+
+    console.log(`Clock-in successful - Attendance ID: ${attendance.id}, User: ${userId}, Date: ${today}`);
 
     return res.status(200).json({
       message: "Clock-in successful",
@@ -105,6 +137,7 @@ const clockIn = async (req, res) => {
       },
     });
   } catch (error) {
+    console.error(`Clock-in error for user ${req.user?.id}:`, error);
     return res
       .status(500)
       .json({ message: "Internal server error", error: error.message });
