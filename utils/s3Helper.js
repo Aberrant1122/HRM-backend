@@ -18,9 +18,10 @@ const bucket = process.env.AWS_S3_BUCKET;
  * Generate a signed URL for an S3 object
  * @param {string} key - The S3 object key
  * @param {number} expiresIn - URL expiration time in seconds (default: 1 hour)
+ * @param {object} overrides - Optional response overrides (e.g., { contentDisposition: 'inline', contentType: 'application/pdf' })
  * @returns {Promise<string>} - The signed URL
  */
-async function getSignedUrlForObject(key, expiresIn = 3600) {
+async function getSignedUrlForObject(key, expiresIn = 3600, overrides = {}) {
   if (!bucket) {
     throw new Error('AWS_S3_BUCKET is not configured');
   }
@@ -33,6 +34,8 @@ async function getSignedUrlForObject(key, expiresIn = 3600) {
     const command = new GetObjectCommand({
       Bucket: bucket,
       Key: key,
+      ...(overrides?.contentDisposition && { ResponseContentDisposition: overrides.contentDisposition }),
+      ...(overrides?.contentType && { ResponseContentType: overrides.contentType }),
     });
 
     const signedUrl = await getSignedUrl(s3Client, command, { expiresIn });

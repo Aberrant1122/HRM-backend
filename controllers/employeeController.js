@@ -305,7 +305,7 @@ const getUserById = async (req, res) => {
         {
           model: UserInfo,
           as: "userInfo",
-          attributes: { exclude: ["id", "userId", "createdAt", "updatedAt"] },
+          // Don't exclude any fields to see what's in the database
           required: false,
         },
       ],
@@ -317,6 +317,8 @@ const getUserById = async (req, res) => {
         message: "User not found",
       });
     }
+    
+
 
     // Generate signed URL for profile picture if it exists and is an S3 URL
     let profilePictureUrl = user.profilePicture;
@@ -334,6 +336,22 @@ const getUserById = async (req, res) => {
     }
 
     // Format the response with user and personal info
+    const userInfoData = user.userInfo ? user.userInfo.toJSON() : null;
+    // Parse attachments if it's a string (MySQL JSON column returns as string sometimes)
+    let attachments = [];
+    if (userInfoData?.attachments) {
+      if (typeof userInfoData.attachments === 'string') {
+        try {
+          attachments = JSON.parse(userInfoData.attachments);
+        } catch (e) {
+          console.error('Failed to parse attachments:', e);
+          attachments = [];
+        }
+      } else if (Array.isArray(userInfoData.attachments)) {
+        attachments = userInfoData.attachments;
+      }
+    }
+    
     const responseData = {
       id: user.id,
       fullName: user.fullName,
@@ -344,7 +362,13 @@ const getUserById = async (req, res) => {
       profilePicture: profilePictureUrl,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      ...(user.userInfo && { personalInfo: user.userInfo }),
+      ...(userInfoData && { 
+        personalInfo: {
+          ...userInfoData,
+          // Use parsed attachments
+          attachments: Array.isArray(attachments) ? attachments : []
+        }
+      }),
     };
 
     return res.status(200).json({
@@ -367,7 +391,6 @@ const deactivateUser = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    // Check if user exists
     const user = await User.findByPk(userId, { transaction });
 
     if (!user) {
@@ -456,20 +479,46 @@ const addEmployeeAttachments = async (req, res) => {
     const attachments = [];
     if (files && files.length > 0) {
       files.forEach((file) => {
+        // Skip invalid files
+        if (!file || !file.originalname) {
+          console.warn('Skipping invalid file:', file);
+          return;
+        }
+        
         const publicPath = file.location || (file.filename ? `/uploads/employees/${file.filename}` : null);
+        
+        if (!publicPath) {
+          console.warn('Skipping file with no path:', file.originalname);
+          return;
+        }
+        
         attachments.push({
-          filename: file.filename || path.basename(publicPath || ''),
+          filename: file.filename || path.basename(publicPath),
           originalName: file.originalname,
           path: publicPath,
-          size: file.size,
-          mimetype: file.mimetype,
+          size: file.size || 0,
+          mimetype: file.mimetype || 'application/octet-stream',
           uploadedAt: new Date().toISOString(),
         });
       });
     }
-
+    
     // Get existing attachments and add new ones
-    const existingAttachments = userInfo.attachments || [];
+    let existingAttachments = userInfo.attachments || [];
+    
+    // Parse if it's a string
+    if (typeof existingAttachments === 'string') {
+      try {
+        existingAttachments = JSON.parse(existingAttachments);
+      } catch (e) {
+        existingAttachments = [];
+      }
+    }
+    
+    if (!Array.isArray(existingAttachments)) {
+      existingAttachments = [];
+    }
+    
     const updatedAttachments = [...existingAttachments, ...attachments];
 
     // Update user info with new attachments
@@ -516,7 +565,6 @@ const removeEmployeeAttachment = async (req, res) => {
       });
     }
 
-    // Find user info
     const userInfo = await UserInfo.findOne({
       where: { userId },
       transaction,
@@ -530,7 +578,17 @@ const removeEmployeeAttachment = async (req, res) => {
       });
     }
 
-    const existingAttachments = userInfo.attachments || [];
+    let existingAttachments = userInfo.attachments || [];
+    if (typeof existingAttachments === 'string') {
+      try {
+        existingAttachments = JSON.parse(existingAttachments);
+      } catch (_) {
+        existingAttachments = [];
+      }
+    }
+    if (!Array.isArray(existingAttachments)) {
+      existingAttachments = [];
+    }
     const attachmentIndex = existingAttachments.findIndex(
       (att) => att.filename === attachmentId
     );
@@ -543,11 +601,44 @@ const removeEmployeeAttachment = async (req, res) => {
       });
     }
 
-    // Remove attachment from array
     const removedAttachment = existingAttachments[attachmentIndex];
+    const attachmentPath = removedAttachment?.path;
+    try {
+      if (attachmentPath && attachmentPath.startsWith('http')) {
+        const { s3Client, bucket, extractS3Key } = require('../utils/s3Helper');
+        const { DeleteObjectCommand } = require('@aws-sdk/client-s3');
+        const key = extractS3Key(attachmentPath);
+        if (key && bucket) {
+          try {
+            await s3Client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+          } catch (err) {
+            const code = err?.Code || err?.name;
+            if (code === 'NoSuchKey') {
+            } else {
+              throw err;
+            }
+          }
+        }
+      } else if (attachmentPath && attachmentPath.startsWith('/uploads/')) {
+        const fs = require('fs');
+        const filePath = path.join(__dirname, '..', attachmentPath);
+        try {
+          if (fs.existsSync(filePath)) {
+            fs.unlinkSync(filePath);
+          }
+        } catch (_) {}
+      }
+    } catch (storageErr) {
+      await transaction.rollback();
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to delete attachment from storage',
+        error: process.env.NODE_ENV === 'development' ? storageErr.message : undefined,
+      });
+    }
+
     existingAttachments.splice(attachmentIndex, 1);
 
-    // Update user info
     await userInfo.update(
       { attachments: existingAttachments },
       { transaction }
@@ -600,7 +691,21 @@ const downloadEmployeeAttachment = async (req, res) => {
       });
     }
 
-    const attachments = userInfo.attachments || [];
+    // Parse attachments if it's a string
+    let attachments = userInfo.attachments || [];
+    if (typeof attachments === 'string') {
+      try {
+        attachments = JSON.parse(attachments);
+      } catch (e) {
+        console.error('Failed to parse attachments:', e);
+        attachments = [];
+      }
+    }
+    
+    if (!Array.isArray(attachments)) {
+      attachments = [];
+    }
+    
     const attachment = attachments.find((att) => att.filename === attachmentId);
 
     if (!attachment) {
@@ -619,76 +724,68 @@ const downloadEmployeeAttachment = async (req, res) => {
       });
     }
 
-    // Extract S3 key from attachment path
-    let key = attachment.path;
-    if (key.startsWith('/uploads/')) {
-      // Local file - not supported for download
-      return res.status(400).json({
-        success: false,
-        message: 'Local file download not supported'
-      });
-    }
-
-  // If it's a URL, extract the key
-  if (key.startsWith('http')) {
-    const { URL } = require('url');
-    try {
-      const u = new URL(key);
-      const hostParts = u.hostname.split('.');
-      const S3_BUCKET = process.env.AWS_S3_BUCKET;
-      if (S3_BUCKET && (hostParts[0] === S3_BUCKET || u.pathname.startsWith(`/${S3_BUCKET}/`))) {
-        if (u.pathname.startsWith(`/${S3_BUCKET}/`)) {
-          key = u.pathname.substring(S3_BUCKET.length + 2);
-        } else {
-          key = u.pathname.replace(/^\//, '');
-        }
+    const attachmentPath = attachment.path;
+    
+    // Check if it's a local file
+    if (attachmentPath && attachmentPath.startsWith('/uploads/')) {
+      const fs = require('fs');
+      const filePath = path.join(__dirname, '..', attachmentPath);
+      
+      // Check if file exists
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({
+          success: false,
+          message: 'File not found on server'
+        });
       }
-    } catch (_) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid attachment URL'
-      });
-    }
-  }
 
-  if (!key) {
+      // Set headers for download
+      const filename = attachment.originalName || attachment.filename;
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader('Content-Type', attachment.mimetype || 'application/octet-stream');
+
+      // Stream the file
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      return;
+    }
+
+    // Handle S3 files
+    if (attachmentPath && attachmentPath.startsWith('http')) {
+      const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
+      
+      try {
+        console.log('Original attachment path:', attachmentPath);
+        const key = extractS3Key(attachmentPath);
+        console.log('Extracted S3 key:', key);
+        
+        if (!key) {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid S3 path'
+          });
+        }
+
+        // Generate a signed URL and redirect
+        const signedUrl = await getSignedUrlForObject(key, 3600); // 1 hour
+        console.log('Generated signed URL (first 100 chars):', signedUrl.substring(0, 100));
+        return res.redirect(signedUrl);
+      } catch (error) {
+        console.error('Error generating signed URL for download:', error);
+        console.error('Error details:', error.stack);
+        return res.status(500).json({
+          success: false,
+          message: 'Failed to generate download URL',
+          error: process.env.NODE_ENV === "development" ? error.message : undefined,
+        });
+      }
+    }
+
+    // If we get here, the path format is unknown
     return res.status(400).json({
       success: false,
-      message: 'Invalid attachment path'
+      message: 'Invalid attachment path format'
     });
-  }
-
-  // Get S3 client
-  const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
-  const s3 = new S3Client({
-    region: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || 'us-east-1',
-    credentials: process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY ? {
-      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-    } : undefined,
-    endpoint: process.env.AWS_S3_ENDPOINT || undefined,
-    forcePathStyle: String(process.env.AWS_S3_FORCE_PATH_STYLE || '').toLowerCase() === 'true'
-  });
-
-  const S3_BUCKET = process.env.AWS_S3_BUCKET;
-  if (!S3_BUCKET) {
-    return res.status(500).json({
-      success: false,
-      message: 'S3 bucket not configured'
-    });
-  }
-
-  // Get object from S3
-  const command = new GetObjectCommand({ Bucket: S3_BUCKET, Key: key });
-  const response = await s3.send(command);
-
-  // Set headers for download
-  const filename = attachment.originalName || attachment.filename;
-  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-  res.setHeader('Content-Type', response.ContentType || attachment.mimetype || 'application/octet-stream');
-
-  // Stream the file
-  response.Body.pipe(res);
 
   } catch (error) {
     console.error("Error downloading employee attachment:", error);
@@ -697,6 +794,78 @@ const downloadEmployeeAttachment = async (req, res) => {
       message: "Failed to download attachment",
       error: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
+  }
+};
+
+const viewEmployeeAttachment = async (req, res) => {
+  try {
+    const { userId, attachmentId } = req.params;
+
+    const user = await User.findByPk(userId);
+    if (!user) {
+      return res.status(404).json({ success: false, message: "User not found" });
+    }
+
+    const userInfo = await UserInfo.findOne({ where: { userId } });
+    if (!userInfo) {
+      return res.status(404).json({ success: false, message: "User information not found" });
+    }
+
+    let attachments = userInfo.attachments || [];
+    if (typeof attachments === 'string') {
+      try { attachments = JSON.parse(attachments); } catch (_) { attachments = []; }
+    }
+    if (!Array.isArray(attachments)) attachments = [];
+
+    const attachment = attachments.find((att) => att.filename === attachmentId);
+    if (!attachment) {
+      return res.status(404).json({ success: false, message: "Attachment not found" });
+    }
+
+    const currentUserId = req.user.id || req.user.userId;
+    if (currentUserId !== parseInt(userId) && req.user.role !== "admin") {
+      return res.status(403).json({ success: false, message: "Access denied" });
+    }
+
+    const attachmentPath = attachment.path;
+
+    if (attachmentPath && attachmentPath.startsWith('/uploads/')) {
+      const fs = require('fs');
+      const filePath = path.join(__dirname, '..', attachmentPath);
+      if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ success: false, message: 'File not found on server' });
+      }
+
+      const filename = attachment.originalName || attachment.filename;
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      res.setHeader('Content-Type', attachment.mimetype || 'application/octet-stream');
+      const fileStream = fs.createReadStream(filePath);
+      fileStream.pipe(res);
+      return;
+    }
+
+    if (attachmentPath && attachmentPath.startsWith('http')) {
+      const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
+      try {
+        const key = extractS3Key(attachmentPath);
+        if (!key) {
+          return res.status(400).json({ success: false, message: 'Invalid S3 path' });
+        }
+        const signedUrl = await getSignedUrlForObject(key, 3600, {
+          contentDisposition: 'inline',
+          contentType: attachment.mimetype || undefined,
+        });
+        return res.redirect(signedUrl);
+      } catch (error) {
+        console.error('Error generating signed URL for inline view:', error);
+        return res.status(500).json({ success: false, message: 'Failed to generate view URL', error: process.env.NODE_ENV === "development" ? error.message : undefined });
+      }
+    }
+
+    return res.status(400).json({ success: false, message: 'Invalid attachment path format' });
+  } catch (error) {
+    console.error("Error viewing employee attachment:", error);
+    res.status(500).json({ success: false, message: "Failed to view attachment", error: process.env.NODE_ENV === "development" ? error.message : undefined });
   }
 };
 
@@ -1114,6 +1283,7 @@ module.exports = {
   addEmployeeAttachments,
   removeEmployeeAttachment,
   downloadEmployeeAttachment,
+  viewEmployeeAttachment,
   updateUserProfile,
   uploadProfilePicture,
   deleteProfilePicture,

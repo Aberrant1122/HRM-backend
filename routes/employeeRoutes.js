@@ -165,6 +165,23 @@ router.get(
   require("../controllers/employeeController").downloadEmployeeAttachment
 );
 
+// View employee attachment inline
+router.get(
+  "/:userId/view-attachment/:attachmentId",
+  authenticate,
+  [
+    param("userId")
+      .isInt({ min: 1 })
+      .withMessage("User ID must be a positive integer")
+      .toInt(),
+    param("attachmentId")
+      .notEmpty()
+      .withMessage("Attachment ID is required"),
+    handleValidationErrors,
+  ],
+  require("../controllers/employeeController").viewEmployeeAttachment
+);
+
 // Update user profile
 router.put(
   "/:userId/profile",

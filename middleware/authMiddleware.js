@@ -5,7 +5,13 @@ const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "your_secret_key";
 
 // Middleware to authenticate the JWT token
 const authenticate = (req, res, next) => {
-  const token = req.headers["authorization"]?.split(" ")[1];
+  // Try to get token from Authorization header first, then from query params
+  let token = req.headers["authorization"]?.split(" ")[1];
+  
+  // If no token in header, check query params (for download links)
+  if (!token && req.query.token) {
+    token = req.query.token;
+  }
 
   if (!token) {
     return res.status(403).json({ message: "Access denied" });
