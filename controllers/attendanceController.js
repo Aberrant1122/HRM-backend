@@ -1,5 +1,5 @@
-const { Attendance, User } = require("../models");
-const { Sequelize } = require("sequelize");
+const { Attendance, User, Task, DailyWorkRecord, Project, UserInfo } = require("../models");
+const { Sequelize, Op } = require("sequelize");
 
 // --- Helper Functions ---
 
@@ -24,8 +24,23 @@ const formatHours = (hours) => {
   return `${h}h ${m}m`;
 };
 
+const autoMarkAbsentsForOverdueClockIns = async () => {
+  const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  await Attendance.update(
+    { status: "absent", totalHours: 0 },
+    {
+      where: {
+        clockOut: null,
+        clockIn: { [Op.lte]: threshold },
+        status: { [Op.ne]: "absent" },
+      },
+    }
+  );
+};
+
 const getAllUsersTodaysAttendance = async (req, res) => {
   try {
+    await autoMarkAbsentsForOverdueClockIns();
     // Get date from query params or default to today
     const selectedDate = req.query.date || new Date().toISOString().split("T")[0];
 
@@ -147,9 +162,46 @@ const clockIn = async (req, res) => {
 // --- Clock Out ---
 const clockOut = async (req, res) => {
   try {
+    await autoMarkAbsentsForOverdueClockIns();
     const userId = req.user.id;
     const now = new Date();
     const today = formatDate(now);
+
+    // Extract checkout form data
+    const { taskId, taskStatus, workNote, deliverableLink } = req.body;
+
+    // Validate required fields
+    if (!taskId || !taskStatus) {
+      return res.status(400).json({
+        message: "Task ID and Task Status are required for checkout",
+      });
+    }
+
+    // Validate task status
+    const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
+    if (!validStatuses.includes(taskStatus)) {
+      return res.status(400).json({
+        message: `Invalid task status. Must be one of: ${validStatuses.join(", ")}`,
+      });
+    }
+
+    // Validate work note length
+    if (workNote && workNote.length > 120) {
+      return res.status(400).json({
+        message: "Work note must be 120 characters or less",
+      });
+    }
+
+    // Validate deliverable link is a URL if provided
+    if (deliverableLink) {
+      try {
+        new URL(deliverableLink);
+      } catch (e) {
+        return res.status(400).json({
+          message: "Deliverable link must be a valid URL",
+        });
+      }
+    }
 
     const attendance = await Attendance.findOne({
       where: {
@@ -165,14 +217,61 @@ const clockOut = async (req, res) => {
         .json({ message: "No active clock-in found for today" });
     }
 
+    // Verify task exists and is assigned to the user
+    const task = await Task.findOne({
+      where: {
+        id: taskId,
+        assigneeId: userId,
+        isActive: true,
+      },
+    });
+
+    if (!task) {
+      return res.status(404).json({
+        message: "Task not found or not assigned to you",
+      });
+    }
+
     // Calculate hours worked
     const clockInTime = new Date(attendance.clockIn);
     const hoursWorked = (now - clockInTime) / (1000 * 60 * 60);
 
+    // Update attendance
     await attendance.update({
       clockOut: now,
       totalHours: hoursWorked,
     });
+
+    // Process uploaded deliverable files
+    const deliverables = [];
+    if (req.files && req.files.length > 0) {
+      req.files.forEach((file) => {
+        deliverables.push({
+          filename: file.originalname,
+          key: file.key,
+          url: file.location || `${process.env.AWS_S3_ENDPOINT || 'https://s3.amazonaws.com'}/${process.env.AWS_S3_BUCKET}/${file.key}`,
+          size: file.size,
+          mimetype: file.mimetype,
+          uploadedAt: new Date().toISOString(),
+        });
+      });
+    }
+
+    // Create daily work record
+    const dailyWorkRecord = await DailyWorkRecord.create({
+      userId,
+      attendanceId: attendance.id,
+      taskId,
+      taskStatus,
+      workNote: workNote || null,
+      deliverableLink: deliverableLink || null,
+      deliverables: deliverables.length > 0 ? deliverables : null,
+      date: today,
+    });
+
+    // Update task status if different from current status
+    // Note: The checkout taskStatus is for reporting, not necessarily the task's actual status
+    // We'll keep them separate as per requirements
 
     return res.status(200).json({
       message: "Clock-out successful",
@@ -184,8 +283,17 @@ const clockOut = async (req, res) => {
         totalHours: formatHours(hoursWorked),
         status: attendance.status,
       },
+      dailyWorkRecord: {
+        id: dailyWorkRecord.id,
+        taskId: dailyWorkRecord.taskId,
+        taskStatus: dailyWorkRecord.taskStatus,
+        workNote: dailyWorkRecord.workNote,
+        deliverableLink: dailyWorkRecord.deliverableLink,
+        deliverables: dailyWorkRecord.deliverables || [],
+      },
     });
   } catch (error) {
+    console.error("Clock-out error:", error);
     return res
       .status(500)
       .json({ message: "Internal server error", error: error.message });
@@ -195,6 +303,7 @@ const clockOut = async (req, res) => {
 // --- Get All Attendance (Admin) ---
 const getAllAttendance = async (req, res) => {
   try {
+    await autoMarkAbsentsForOverdueClockIns();
     const records = await Attendance.findAll({
       include: [
         {
@@ -234,6 +343,7 @@ const getAllAttendance = async (req, res) => {
 // Get today's attendance for the authenticated user
 const getTodaysAttendance = async (req, res) => {
   try {
+    await autoMarkAbsentsForOverdueClockIns();
     const userId = req.user.id;
     const today = new Date().toISOString().split('T')[0];
 
@@ -304,6 +414,7 @@ const getTodaysAttendance = async (req, res) => {
 // Get weekly attendance for the authenticated user
 const getWeeklyAttendance = async (req, res) => {
   try {
+    await autoMarkAbsentsForOverdueClockIns();
     const userId = req.user.id;
     const endDate = new Date();
     const startDate = new Date();
@@ -400,6 +511,225 @@ const getWeeklyAttendance = async (req, res) => {
   }
 };
 
+// --- Get Active Tasks for Checkout Form ---
+const getActiveTasksForCheckout = async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // Get all assigned tasks for the user (excluding cancelled and completed)
+    const tasks = await Task.findAll({
+      where: {
+        assigneeId: userId,
+        isActive: true,
+        status: {
+          [Op.notIn]: ["cancelled", "completed"], // Exclude cancelled and completed tasks
+        },
+      },
+      attributes: ["id", "title", "status", "priority"],
+      include: [
+        {
+          model: Project,
+          as: "project",
+          attributes: ["id", "name"],
+          required: false,
+        },
+      ],
+      order: [
+        // Show in-progress tasks first, then by priority and due date
+        ["status", "ASC"], // This will group by status
+        ["priority", "DESC"],
+        ["dueDate", "ASC"],
+      ],
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: tasks,
+    });
+  } catch (error) {
+    console.error("Error fetching active tasks:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching active tasks",
+      error: error.message,
+    });
+  }
+};
+
+// --- Get Daily Work Records (Manager/Admin) ---
+const getDailyWorkRecords = async (req, res) => {
+  try {
+    await autoMarkAbsentsForOverdueClockIns();
+    const { date, employeeId, taskStatus } = req.query;
+    const userRole = req.user.role;
+
+    const normalizeDeliverables = (d) => {
+      if (!d) return [];
+      if (Array.isArray(d)) return d;
+      if (typeof d === "string") {
+        try {
+          const parsed = JSON.parse(d);
+          return Array.isArray(parsed) ? parsed : [];
+        } catch {
+          return [];
+        }
+      }
+      if (typeof d === "object") {
+        if (d.filename || d.url || d.key) return [d];
+        const values = Object.values(d).filter((v) => v && typeof v === "object");
+        return values;
+      }
+      return [];
+    };
+
+    // Build where clause
+    const whereClause = {};
+    const restrictByManagerProjects = String(userRole || "").toLowerCase() !== "admin";
+
+    // Filter by date if provided
+    if (date) {
+      whereClause.date = date;
+    }
+
+    // Filter by employee if provided
+    if (employeeId) {
+      if (String(userRole || "").toLowerCase() === "admin") {
+        // Admin can filter by any employee
+        whereClause.userId = parseInt(employeeId, 10);
+      } else if (restrictByManagerProjects) {
+        // Managers or project managers: allow filter but results are restricted to their projects
+        whereClause.userId = parseInt(employeeId, 10);
+      } else {
+        return res.status(403).json({
+          success: false,
+          message: "Access denied",
+        });
+      }
+    }
+
+    // Get daily work records
+    const records = await DailyWorkRecord.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "fullName", "email"],
+          required: false,
+        },
+        {
+          model: Task,
+          as: "task",
+          attributes: ["id", "title", "status", "priority", "projectId"],
+          required: true,
+          ...(restrictByManagerProjects && {
+            include: [
+              {
+                model: Project,
+                as: "project",
+                attributes: ["id", "name", "managerId"],
+                where: { managerId: req.user.id },
+                required: true,
+              },
+            ],
+          }),
+        },
+        {
+          model: Attendance,
+          as: "attendance",
+          attributes: ["id", "clockIn", "clockOut", "totalHours"],
+          required: false,
+        },
+      ],
+      order: [["date", "DESC"], ["createdAt", "DESC"]],
+    });
+
+    // Filter by task status if provided
+    let filteredRecords = records;
+    if (taskStatus) {
+      filteredRecords = records.filter((record) => record.taskStatus === taskStatus);
+    }
+
+    // Format response
+    const formattedRecords = filteredRecords
+      .filter((record) => record.user && record.task && record.attendance) // Filter out records with missing associations
+      .map((record) => ({
+        id: record.id,
+        employee: {
+          id: record.user?.id || 0,
+          name: record.user?.fullName || "Unknown",
+          email: record.user?.email || "",
+        },
+        date: record.date,
+        checkIn: record.attendance?.clockIn ? formatTime(record.attendance.clockIn) : null,
+        checkOut: record.attendance?.clockOut ? formatTime(record.attendance.clockOut) : null,
+        task: {
+          id: record.task?.id || 0,
+          name: record.task?.title || "Unknown Task",
+          status: record.task?.status || "unknown",
+          priority: record.task?.priority || "medium",
+        },
+        taskStatus: record.taskStatus,
+        workNote: record.workNote,
+        deliverableLink: record.deliverableLink,
+        deliverables: normalizeDeliverables(record.deliverables),
+        totalHours: record.attendance?.totalHours || 0,
+        formattedHours: record.attendance?.totalHours ? formatHours(record.attendance.totalHours) : "0h 0m",
+      }));
+
+    // Sign S3-based links so they are accessible to the admin
+    const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
+    const signUrlIfS3 = async (value) => {
+      if (!value) return value;
+      // If it's a raw key, use it directly; otherwise try to extract key from URL
+      const key = value.startsWith('http') ? extractS3Key(value) : value;
+      if (!key) return value;
+      try {
+        return await getSignedUrlForObject(key, 3600);
+      } catch (e) {
+        console.error('Error signing S3 URL:', e);
+        return value;
+      }
+    };
+
+    const recordsWithSignedUrls = await Promise.all(
+      formattedRecords.map(async (rec) => {
+        const signedDeliverableLink = rec.deliverableLink
+          ? await signUrlIfS3(rec.deliverableLink)
+          : rec.deliverableLink;
+        const signedFiles = await Promise.all(
+          (rec.deliverables || []).map(async (file) => {
+            const source = file.key || file.url;
+            const signed = source ? await signUrlIfS3(source) : source;
+            return {
+              ...file,
+              url: signed || file.url,
+            };
+          })
+        );
+        return {
+          ...rec,
+          deliverableLink: signedDeliverableLink,
+          deliverables: signedFiles,
+        };
+      })
+    );
+
+    return res.status(200).json({
+      success: true,
+      count: recordsWithSignedUrls.length,
+      data: recordsWithSignedUrls,
+    });
+  } catch (error) {
+    console.error("Error fetching daily work records:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching daily work records",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   clockIn,
   clockOut,
@@ -407,4 +737,6 @@ module.exports = {
   getAllUsersTodaysAttendance,
   getTodaysAttendance,
   getWeeklyAttendance,
+  getActiveTasksForCheckout,
+  getDailyWorkRecords,
 };

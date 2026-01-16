@@ -64,10 +64,43 @@ module.exports = {
       message: "Access denied: Manager privileges required",
     });
   },
-  isAdminOrManager: (req, res, next) => {
-    if (req.user && (req.user.role === "admin" || req.user.role === "manager")) {
+  isAdminOrManager: async (req, res, next) => {
+    // Check if user is authenticated first
+    if (!req.user) {
+      return res.status(401).json({
+        success: false,
+        message: "Authentication required",
+      });
+    }
+
+    // Get role and normalize to lowercase for comparison
+    const userRole = req.user.role?.toLowerCase?.() || req.user.role;
+
+    if (userRole === "admin" || userRole === "manager") {
       return next();
     }
+
+    // Fallback: allow users assigned as project managers (managerId) even if role is 'employee'
+    try {
+      const { Project } = require("../models");
+      const hasManagerAssignment = await Project.findOne({
+        where: { managerId: req.user.id, isActive: true },
+        attributes: ["id"],
+      });
+      if (hasManagerAssignment) {
+        return next();
+      }
+    } catch (e) {
+      console.warn("Failed to verify manager assignment:", e?.message || e);
+    }
+
+    // Log for debugging
+    console.log("Access denied for user:", {
+      userId: req.user.id,
+      role: req.user.role,
+      userRole: userRole,
+    });
+
     return res.status(403).json({
       success: false,
       message: "Access denied: Admin or Manager privileges required",
