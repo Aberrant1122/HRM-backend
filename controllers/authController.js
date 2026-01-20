@@ -13,6 +13,23 @@ const EMAIL_USER = process.env.EMAIL_USER || "";
 const EMAIL_PASS = process.env.EMAIL_PASS || "";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
+const getAppUrl = (req) => {
+  const envUrl =
+    process.env.APP_URL ||
+    process.env.FRONTEND_URL ||
+    process.env.WEB_APP_URL ||
+    APP_URL;
+  if (envUrl) return String(envUrl).replace(/\/+$/, "");
+  const origin = req.headers.origin;
+  if (origin) return String(origin).replace(/\/+$/, "");
+  const proto =
+    req.headers["x-forwarded-proto"] ||
+    (req.socket && req.socket.encrypted ? "https" : "http");
+  const host = req.headers["x-forwarded-host"] || req.headers.host;
+  if (host) return `${proto}://${host}`;
+  return "http://localhost:3000";
+};
+
 // Email transporter
 const transporter = nodemailer.createTransport({
   service: EMAIL_SERVICE,
@@ -143,7 +160,8 @@ const inviteEmployee = async (req, res) => {
 
     // Send invitation email (outside of transaction)
     try {
-      const resetUrl = `${APP_URL}/set-password?token=${resetToken}`;
+      const baseUrl = getAppUrl(req);
+      const resetUrl = `${baseUrl}/set-password?token=${resetToken}`;
       await transporter.sendMail({
         to: email,
         subject: "You have been invited to join our HRM system",
@@ -431,7 +449,8 @@ const requestPasswordReset = async (req, res) => {
     await user.save();
 
     // Send email with reset link
-    const resetUrl = `${APP_URL}/reset-password?token=${resetToken}`;
+    const baseUrl = getAppUrl(req);
+    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
 
     await transporter.sendMail({
       from: `"HRM System" <${EMAIL_USER}>`,
