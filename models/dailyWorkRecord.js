@@ -45,7 +45,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       taskId: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         references: {
           model: "tasks",
           key: "id",
@@ -53,7 +53,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       taskStatus: {
         type: DataTypes.ENUM("planning", "in-progress", "testing", "blocked", "completed"),
-        allowNull: false,
+        allowNull: true,
       },
       workNote: {
         type: DataTypes.STRING(120),

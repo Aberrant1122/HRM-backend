@@ -159,31 +159,24 @@ const clockIn = async (req, res) => {
   }
 };
 
-// --- Clock Out ---
-const clockOut = async (req, res) => {
-  try {
-    await autoMarkAbsentsForOverdueClockIns();
-    const userId = req.user.id;
-    const now = new Date();
-    const today = formatDate(now);
+  // --- Clock Out ---
+  const clockOut = async (req, res) => {
+    try {
+      await autoMarkAbsentsForOverdueClockIns();
+      const userId = req.user.id;
+      const now = new Date();
+      const today = formatDate(now);
 
-    // Extract checkout form data
-    const { taskId, taskStatus, workNote, deliverableLink } = req.body;
+      // Extract checkout form data
+      const { taskId, taskStatus, workNote, deliverableLink } = req.body;
 
-    // Validate required fields
-    if (!taskId || !taskStatus) {
-      return res.status(400).json({
-        message: "Task ID and Task Status are required for checkout",
-      });
-    }
-
-    // Validate task status
-    const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
-    if (!validStatuses.includes(taskStatus)) {
-      return res.status(400).json({
-        message: `Invalid task status. Must be one of: ${validStatuses.join(", ")}`,
-      });
-    }
+      // Validate task status
+      const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
+      if (taskStatus && !validStatuses.includes(taskStatus)) {
+        return res.status(400).json({
+          message: `Invalid task status. Must be one of: ${validStatuses.join(", ")}`,
+        });
+      }
 
     // Validate work note length
     if (workNote && workNote.length > 120) {
@@ -215,26 +208,27 @@ const clockOut = async (req, res) => {
       return res
         .status(400)
         .json({ message: "No active clock-in found for today" });
-    }
+      }
 
-    // Verify task exists and is assigned to the user
-    const task = await Task.findOne({
-      where: {
-        id: taskId,
-        assigneeId: userId,
-        isActive: true,
-      },
-    });
+      // Verify task exists and is assigned to the user if provided
+      if (taskId) {
+        const task = await Task.findOne({
+          where: {
+            id: taskId,
+            assigneeId: userId,
+            isActive: true,
+          },
+        });
+        if (!task) {
+          return res.status(404).json({
+            message: "Task not found or not assigned to you",
+          });
+        }
+      }
 
-    if (!task) {
-      return res.status(404).json({
-        message: "Task not found or not assigned to you",
-      });
-    }
-
-    // Calculate hours worked
-    const clockInTime = new Date(attendance.clockIn);
-    const hoursWorked = (now - clockInTime) / (1000 * 60 * 60);
+      // Calculate hours worked
+      const clockInTime = new Date(attendance.clockIn);
+      const hoursWorked = (now - clockInTime) / (1000 * 60 * 60);
 
     // Update attendance
     await attendance.update({
@@ -257,17 +251,17 @@ const clockOut = async (req, res) => {
       });
     }
 
-    // Create daily work record
-    const dailyWorkRecord = await DailyWorkRecord.create({
-      userId,
-      attendanceId: attendance.id,
-      taskId,
-      taskStatus,
-      workNote: workNote || null,
-      deliverableLink: deliverableLink || null,
-      deliverables: deliverables.length > 0 ? deliverables : null,
-      date: today,
-    });
+      // Create daily work record
+      const dailyWorkRecord = await DailyWorkRecord.create({
+        userId,
+        attendanceId: attendance.id,
+        taskId: taskId || null,
+        taskStatus: taskStatus || null,
+        workNote: workNote || null,
+        deliverableLink: deliverableLink || null,
+        deliverables: deliverables.length > 0 ? deliverables : null,
+        date: today,
+      });
 
     // Update task status if different from current status
     // Note: The checkout taskStatus is for reporting, not necessarily the task's actual status
