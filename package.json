@@ -5,7 +5,7 @@
   "scripts": {
     "build": "echo \"Build completed - no database operations during build phase\"",
     "prestart": "npx sequelize-cli db:migrate --config=./config/config.js",
-    "start": "node server.js",
+    "start": "npm run start:migrate",
      "start:migrate": "npx sequelize-cli db:migrate --config=./config/config.js && node server.js",
     "dev": "nodemon server.js",
     "migrate": "npx sequelize-cli db:migrate --config=./config/config.js",

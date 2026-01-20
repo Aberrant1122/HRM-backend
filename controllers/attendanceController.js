@@ -251,17 +251,22 @@ const clockIn = async (req, res) => {
       });
     }
 
-      // Create daily work record
-      const dailyWorkRecord = await DailyWorkRecord.create({
-        userId,
-        attendanceId: attendance.id,
-        taskId: taskId || null,
-        taskStatus: taskStatus || null,
-        workNote: workNote || null,
-        deliverableLink: deliverableLink || null,
-        deliverables: deliverables.length > 0 ? deliverables : null,
-        date: today,
-      });
+      // Create daily work record only if any details are provided
+      const hasDetails =
+        !!(taskId || taskStatus || workNote || deliverableLink || (deliverables && deliverables.length > 0));
+      let dailyWorkRecord = null;
+      if (hasDetails) {
+        dailyWorkRecord = await DailyWorkRecord.create({
+          userId,
+          attendanceId: attendance.id,
+          taskId: taskId || null,
+          taskStatus: taskStatus || null,
+          workNote: workNote || null,
+          deliverableLink: deliverableLink || null,
+          deliverables: deliverables.length > 0 ? deliverables : null,
+          date: today,
+        });
+      }
 
     // Update task status if different from current status
     // Note: The checkout taskStatus is for reporting, not necessarily the task's actual status
@@ -277,14 +282,16 @@ const clockIn = async (req, res) => {
         totalHours: formatHours(hoursWorked),
         status: attendance.status,
       },
-      dailyWorkRecord: {
-        id: dailyWorkRecord.id,
-        taskId: dailyWorkRecord.taskId,
-        taskStatus: dailyWorkRecord.taskStatus,
-        workNote: dailyWorkRecord.workNote,
-        deliverableLink: dailyWorkRecord.deliverableLink,
-        deliverables: dailyWorkRecord.deliverables || [],
-      },
+      ...(dailyWorkRecord && {
+        dailyWorkRecord: {
+          id: dailyWorkRecord.id,
+          taskId: dailyWorkRecord.taskId,
+          taskStatus: dailyWorkRecord.taskStatus,
+          workNote: dailyWorkRecord.workNote,
+          deliverableLink: dailyWorkRecord.deliverableLink,
+          deliverables: dailyWorkRecord.deliverables || [],
+        },
+      }),
     });
   } catch (error) {
     console.error("Clock-out error:", error);
