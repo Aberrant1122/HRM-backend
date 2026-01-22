@@ -251,9 +251,11 @@ const clockIn = async (req, res) => {
       });
     }
 
-      // Create daily work record only if any details are provided
+      // Create daily work record only if there's meaningful data to record
+      // This prevents creating empty records while still allowing checkout without task selection
       const hasDetails =
         !!(taskId || taskStatus || workNote || deliverableLink || (deliverables && deliverables.length > 0));
+      
       let dailyWorkRecord = null;
       if (hasDetails) {
         dailyWorkRecord = await DailyWorkRecord.create({
@@ -264,6 +266,19 @@ const clockIn = async (req, res) => {
           workNote: workNote || null,
           deliverableLink: deliverableLink || null,
           deliverables: deliverables.length > 0 ? deliverables : null,
+          date: today,
+        });
+      } else {
+        // Create a basic work record even without task details to maintain consistency
+        // This ensures every checkout has a corresponding work record
+        dailyWorkRecord = await DailyWorkRecord.create({
+          userId,
+          attendanceId: attendance.id,
+          taskId: null,
+          taskStatus: null,
+          workNote: "No specific task worked on",
+          deliverableLink: null,
+          deliverables: null,
           date: today,
         });
       }
@@ -282,16 +297,14 @@ const clockIn = async (req, res) => {
         totalHours: formatHours(hoursWorked),
         status: attendance.status,
       },
-      ...(dailyWorkRecord && {
-        dailyWorkRecord: {
-          id: dailyWorkRecord.id,
-          taskId: dailyWorkRecord.taskId,
-          taskStatus: dailyWorkRecord.taskStatus,
-          workNote: dailyWorkRecord.workNote,
-          deliverableLink: dailyWorkRecord.deliverableLink,
-          deliverables: dailyWorkRecord.deliverables || [],
-        },
-      }),
+      dailyWorkRecord: dailyWorkRecord ? {
+        id: dailyWorkRecord.id,
+        taskId: dailyWorkRecord.taskId,
+        taskStatus: dailyWorkRecord.taskStatus,
+        workNote: dailyWorkRecord.workNote,
+        deliverableLink: dailyWorkRecord.deliverableLink,
+        deliverables: dailyWorkRecord.deliverables || [],
+      } : null,
     });
   } catch (error) {
     console.error("Clock-out error:", error);
@@ -609,21 +622,30 @@ const getDailyWorkRecords = async (req, res) => {
     }
 
     // Get daily work records
-    const records = await DailyWorkRecord.findAll({
-      where: whereClause,
-      include: [
-        {
-          model: User,
-          as: "user",
-          attributes: ["id", "fullName", "email"],
-          required: false,
+    let records;
+    if (restrictByManagerProjects) {
+      // For managers, we need to handle two cases:
+      // 1. Records with tasks that belong to projects they manage
+      // 2. Records without tasks (which should be included for their team members)
+      
+      // First, get records with tasks from projects they manage
+      const recordsWithTasks = await DailyWorkRecord.findAll({
+        where: {
+          ...whereClause,
+          taskId: { [Sequelize.Op.ne]: null }, // Only records with tasks
         },
-        {
-          model: Task,
-          as: "task",
-          attributes: ["id", "title", "status", "priority", "projectId"],
-          required: true,
-          ...(restrictByManagerProjects && {
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "fullName", "email"],
+            required: false,
+          },
+          {
+            model: Task,
+            as: "task",
+            attributes: ["id", "title", "status", "priority", "projectId"],
+            required: true,
             include: [
               {
                 model: Project,
@@ -633,17 +655,77 @@ const getDailyWorkRecords = async (req, res) => {
                 required: true,
               },
             ],
-          }),
+          },
+          {
+            model: Attendance,
+            as: "attendance",
+            attributes: ["id", "clockIn", "clockOut", "totalHours"],
+            required: false,
+          },
+        ],
+        order: [["date", "DESC"], ["createdAt", "DESC"]],
+      });
+
+      // Then, get records without tasks for employees in projects they manage
+      const recordsWithoutTasks = await DailyWorkRecord.findAll({
+        where: {
+          ...whereClause,
+          taskId: null, // Only records without tasks
         },
-        {
-          model: Attendance,
-          as: "attendance",
-          attributes: ["id", "clockIn", "clockOut", "totalHours"],
-          required: false,
-        },
-      ],
-      order: [["date", "DESC"], ["createdAt", "DESC"]],
-    });
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "fullName", "email"],
+            required: true,
+            // We could add additional filtering here to only include team members
+            // but for now, we'll include all records without tasks
+          },
+          {
+            model: Task,
+            as: "task",
+            attributes: ["id", "title", "status", "priority", "projectId"],
+            required: false,
+          },
+          {
+            model: Attendance,
+            as: "attendance",
+            attributes: ["id", "clockIn", "clockOut", "totalHours"],
+            required: false,
+          },
+        ],
+        order: [["date", "DESC"], ["createdAt", "DESC"]],
+      });
+
+      // Combine both sets of records
+      records = [...recordsWithTasks, ...recordsWithoutTasks];
+    } else {
+      // For admins, get all records
+      records = await DailyWorkRecord.findAll({
+        where: whereClause,
+        include: [
+          {
+            model: User,
+            as: "user",
+            attributes: ["id", "fullName", "email"],
+            required: false,
+          },
+          {
+            model: Task,
+            as: "task",
+            attributes: ["id", "title", "status", "priority", "projectId"],
+            required: false,
+          },
+          {
+            model: Attendance,
+            as: "attendance",
+            attributes: ["id", "clockIn", "clockOut", "totalHours"],
+            required: false,
+          },
+        ],
+        order: [["date", "DESC"], ["createdAt", "DESC"]],
+      });
+    }
 
     // Filter by task status if provided
     let filteredRecords = records;
@@ -653,7 +735,7 @@ const getDailyWorkRecords = async (req, res) => {
 
     // Format response
     const formattedRecords = filteredRecords
-      .filter((record) => record.user && record.task && record.attendance) // Filter out records with missing associations
+      .filter((record) => record.user && record.attendance) // Only filter out records with missing user or attendance
       .map((record) => ({
         id: record.id,
         employee: {
@@ -664,12 +746,12 @@ const getDailyWorkRecords = async (req, res) => {
         date: record.date,
         checkIn: record.attendance?.clockIn ? formatTime(record.attendance.clockIn) : null,
         checkOut: record.attendance?.clockOut ? formatTime(record.attendance.clockOut) : null,
-        task: {
-          id: record.task?.id || 0,
-          name: record.task?.title || "Unknown Task",
-          status: record.task?.status || "unknown",
-          priority: record.task?.priority || "medium",
-        },
+        task: record.task ? {
+          id: record.task.id,
+          name: record.task.title,
+          status: record.task.status,
+          priority: record.task.priority,
+        } : null, // Handle case where no task is associated
         taskStatus: record.taskStatus,
         workNote: record.workNote,
         deliverableLink: record.deliverableLink,
