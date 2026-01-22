@@ -5,6 +5,7 @@ const {
   register,
   setPassword,
   requestPasswordReset,
+  validateInviteToken,
   validateInviteEmployee,
   validateLogin,
   validateRegister,
@@ -21,6 +22,7 @@ router.post("/register", validateRegister, register);
 router.post("/login", validateLogin, login);
 router.post("/request-password-reset", requestPasswordReset);
 router.post("/set-password", validateSetPassword, setPassword);
+router.get("/validate-invite", validateInviteToken);
 
 // Protected routes
 router.use(isAuthenticated);

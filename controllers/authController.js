@@ -403,12 +403,12 @@ const setPassword = async (req, res) => {
       },
     });
 
-    if (user.status === "inactive") {
-      User.update({ status: "active" }, { where: { id: user.id } });
-    }
-
     if (!user) {
       return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    if (user.status === "inactive") {
+      user.status = "active";
     }
 
     // Hash the new password before saving
@@ -471,11 +471,46 @@ const requestPasswordReset = async (req, res) => {
   }
 };
 
+// Controller for validating invite token and returning user data
+const validateInviteToken = async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({ message: "Token is required" });
+    }
+
+    // Find user by reset token and check if it's not expired
+    const user = await User.findOne({
+      where: {
+        resetToken: token,
+        resetTokenExpiry: { [Sequelize.Op.gt]: Date.now() },
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Invalid or expired token" });
+    }
+
+    // Return user data needed for the set password form
+    return res.status(200).json({
+      fullName: user.fullName,
+      email: user.email,
+      role: user.role,
+      companyName: process.env.COMPANY_NAME || "HRM System", // You can add this to your .env or get from a company settings table
+    });
+  } catch (error) {
+    console.error("Error validating invite token:", error);
+    return res.status(500).json({ message: "Error validating token" });
+  }
+};
+
 module.exports = {
   inviteEmployee,
   login,
   setPassword,
   requestPasswordReset,
+  validateInviteToken,
   validateInviteEmployee,
   validateRegister,
   register,
