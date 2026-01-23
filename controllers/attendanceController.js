@@ -251,37 +251,23 @@ const clockIn = async (req, res) => {
       });
     }
 
-      // Create daily work record only if there's meaningful data to record
-      // This prevents creating empty records while still allowing checkout without task selection
-      const hasDetails =
-        !!(taskId || taskStatus || workNote || deliverableLink || (deliverables && deliverables.length > 0));
+      // Always create daily work record when checking out
+      // This ensures every checkout has a corresponding work record for reporting
+      console.log(`Creating daily work record for user ${userId}, attendance ${attendance.id}, date ${today}`);
+      console.log(`Task details: taskId=${taskId}, taskStatus=${taskStatus}, workNote=${workNote}`);
       
-      let dailyWorkRecord = null;
-      if (hasDetails) {
-        dailyWorkRecord = await DailyWorkRecord.create({
-          userId,
-          attendanceId: attendance.id,
-          taskId: taskId || null,
-          taskStatus: taskStatus || null,
-          workNote: workNote || null,
-          deliverableLink: deliverableLink || null,
-          deliverables: deliverables.length > 0 ? deliverables : null,
-          date: today,
-        });
-      } else {
-        // Create a basic work record even without task details to maintain consistency
-        // This ensures every checkout has a corresponding work record
-        dailyWorkRecord = await DailyWorkRecord.create({
-          userId,
-          attendanceId: attendance.id,
-          taskId: null,
-          taskStatus: null,
-          workNote: "No specific task worked on",
-          deliverableLink: null,
-          deliverables: null,
-          date: today,
-        });
-      }
+      const dailyWorkRecord = await DailyWorkRecord.create({
+        userId,
+        attendanceId: attendance.id,
+        taskId: taskId || null,
+        taskStatus: taskStatus || null,
+        workNote: workNote || (taskId ? null : "General work - no specific task"),
+        deliverableLink: deliverableLink || null,
+        deliverables: deliverables.length > 0 ? deliverables : null,
+        date: today,
+      });
+
+      console.log(`Daily work record created successfully with ID: ${dailyWorkRecord.id}`);
 
     // Update task status if different from current status
     // Note: The checkout taskStatus is for reporting, not necessarily the task's actual status
@@ -297,14 +283,14 @@ const clockIn = async (req, res) => {
         totalHours: formatHours(hoursWorked),
         status: attendance.status,
       },
-      dailyWorkRecord: dailyWorkRecord ? {
+      dailyWorkRecord: {
         id: dailyWorkRecord.id,
         taskId: dailyWorkRecord.taskId,
         taskStatus: dailyWorkRecord.taskStatus,
         workNote: dailyWorkRecord.workNote,
         deliverableLink: dailyWorkRecord.deliverableLink,
         deliverables: dailyWorkRecord.deliverables || [],
-      } : null,
+      },
     });
   } catch (error) {
     console.error("Clock-out error:", error);
@@ -621,116 +607,68 @@ const getDailyWorkRecords = async (req, res) => {
       }
     }
 
+    console.log(`getDailyWorkRecords called by user ${req.user.id} (${req.user.role})`);
+    console.log(`Query params: date=${date}, employeeId=${employeeId}, taskStatus=${taskStatus}`);
+    console.log(`Where clause:`, whereClause);
+
     // Get daily work records
-    let records;
-    if (restrictByManagerProjects) {
-      // For managers, we need to handle two cases:
-      // 1. Records with tasks that belong to projects they manage
-      // 2. Records without tasks (which should be included for their team members)
-      
-      // First, get records with tasks from projects they manage
-      const recordsWithTasks = await DailyWorkRecord.findAll({
-        where: {
-          ...whereClause,
-          taskId: { [Sequelize.Op.ne]: null }, // Only records with tasks
+    const records = await DailyWorkRecord.findAll({
+      where: whereClause,
+      include: [
+        {
+          model: User,
+          as: "user",
+          attributes: ["id", "fullName", "email"],
+          required: false,
         },
-        include: [
-          {
-            model: User,
-            as: "user",
-            attributes: ["id", "fullName", "email"],
-            required: false,
-          },
-          {
-            model: Task,
-            as: "task",
-            attributes: ["id", "title", "status", "priority", "projectId"],
-            required: true,
+        {
+          model: Task,
+          as: "task",
+          attributes: ["id", "title", "status", "priority", "projectId"],
+          required: false,
+          ...(restrictByManagerProjects && {
             include: [
               {
                 model: Project,
                 as: "project",
                 attributes: ["id", "name", "managerId"],
                 where: { managerId: req.user.id },
-                required: true,
+                required: false, // Changed to false to include records without tasks
               },
             ],
-          },
-          {
-            model: Attendance,
-            as: "attendance",
-            attributes: ["id", "clockIn", "clockOut", "totalHours"],
-            required: false,
-          },
-        ],
-        order: [["date", "DESC"], ["createdAt", "DESC"]],
-      });
-
-      // Then, get records without tasks for employees in projects they manage
-      const recordsWithoutTasks = await DailyWorkRecord.findAll({
-        where: {
-          ...whereClause,
-          taskId: null, // Only records without tasks
+          }),
         },
-        include: [
-          {
-            model: User,
-            as: "user",
-            attributes: ["id", "fullName", "email"],
-            required: true,
-            // We could add additional filtering here to only include team members
-            // but for now, we'll include all records without tasks
-          },
-          {
-            model: Task,
-            as: "task",
-            attributes: ["id", "title", "status", "priority", "projectId"],
-            required: false,
-          },
-          {
-            model: Attendance,
-            as: "attendance",
-            attributes: ["id", "clockIn", "clockOut", "totalHours"],
-            required: false,
-          },
-        ],
-        order: [["date", "DESC"], ["createdAt", "DESC"]],
-      });
+        {
+          model: Attendance,
+          as: "attendance",
+          attributes: ["id", "clockIn", "clockOut", "totalHours"],
+          required: false,
+        },
+      ],
+      order: [["date", "DESC"], ["createdAt", "DESC"]],
+    });
 
-      // Combine both sets of records
-      records = [...recordsWithTasks, ...recordsWithoutTasks];
-    } else {
-      // For admins, get all records
-      records = await DailyWorkRecord.findAll({
-        where: whereClause,
-        include: [
-          {
-            model: User,
-            as: "user",
-            attributes: ["id", "fullName", "email"],
-            required: false,
-          },
-          {
-            model: Task,
-            as: "task",
-            attributes: ["id", "title", "status", "priority", "projectId"],
-            required: false,
-          },
-          {
-            model: Attendance,
-            as: "attendance",
-            attributes: ["id", "clockIn", "clockOut", "totalHours"],
-            required: false,
-          },
-        ],
-        order: [["date", "DESC"], ["createdAt", "DESC"]],
+    // For managers, filter records to only include:
+    // 1. Records with tasks from projects they manage
+    // 2. Records without tasks (general work records)
+    let filteredRecords = records;
+    if (restrictByManagerProjects) {
+      filteredRecords = records.filter(record => {
+        // Include records without tasks (general work)
+        if (!record.task) {
+          return true;
+        }
+        // Include records with tasks from projects they manage
+        return record.task.project && record.task.project.managerId === req.user.id;
       });
     }
 
+    console.log(`Found ${records.length} total records`);
+    console.log(`After manager filtering: ${filteredRecords.length} records`);
+
     // Filter by task status if provided
-    let filteredRecords = records;
     if (taskStatus) {
-      filteredRecords = records.filter((record) => record.taskStatus === taskStatus);
+      filteredRecords = filteredRecords.filter((record) => record.taskStatus === taskStatus);
     }
 
     // Format response
