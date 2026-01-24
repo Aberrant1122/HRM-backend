@@ -1,0 +1,18 @@
+DOTENV config loaded from:
+DB_PORT from env:
+DB_HOST from env:
+Schema for daily_work_records:
+{"Field":"id","Type":"int(11)","Null":"NO","Key":"PRI","Default":null,"Extra":"auto_increment"}
+{"Field":"userId","Type":"int(11)","Null":"NO","Key":"MUL","Default":null,"Extra":""}
+{"Field":"attendanceId","Type":"int(11)","Null":"NO","Key":"MUL","Default":null,"Extra":""}
+{"Field":"taskId","Type":"int(11)","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"taskStatus","Type":"enum('planning','in-progress','testing','blocked','completed')","Null":"YES","Key":"MUL","Default":null,"Extra":""}
+{"Field":"workNote","Type":"varchar(120)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"deliverableLink","Type":"varchar(500)","Null":"YES","Key":"","Default":null,"Extra":""}
+{"Field":"date","Type":"date","Null":"NO","Key":"MUL","Default":null,"Extra":""}
+{"Field":"createdAt","Type":"datetime","Null":"NO","Key":"","Default":"current_timestamp()","Extra":""}
+{"Field":"updatedAt","Type":"datetime","Null":"NO","Key":"","Default":"current_timestamp()","Extra":"on update current_timestamp()"}
+{"Field":"deliverables","Type":"longtext","Null":"YES","Key":"","Default":null,"Extra":""}
+
+taskId Nullable: YES
+taskId is nullable (Correct).

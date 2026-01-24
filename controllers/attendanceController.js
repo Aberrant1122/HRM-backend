@@ -169,6 +169,11 @@ const clockIn = async (req, res) => {
 
       // Extract checkout form data
       const { taskId, taskStatus, workNote, deliverableLink } = req.body;
+      const numericTaskId = (() => {
+        if (taskId === undefined || taskId === null) return null;
+        const n = Number(taskId);
+        return Number.isInteger(n) && n > 0 ? n : null;
+      })();
 
       // Validate task status
       const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
@@ -196,7 +201,7 @@ const clockIn = async (req, res) => {
       }
     }
 
-    const attendance = await Attendance.findOne({
+    let attendance = await Attendance.findOne({
       where: {
         userId,
         date: today,
@@ -205,16 +210,20 @@ const clockIn = async (req, res) => {
     });
 
     if (!attendance) {
-      return res
-        .status(400)
-        .json({ message: "No active clock-in found for today" });
-      }
+      // Auto-create attendance to allow checkout without prior clock-in
+      attendance = await Attendance.create({
+        userId,
+        date: today,
+        clockIn: now,
+        status: "present",
+      });
+    }
 
       // Verify task exists and is assigned to the user if provided
-      if (taskId) {
+      if (numericTaskId) {
         const task = await Task.findOne({
           where: {
-            id: taskId,
+            id: numericTaskId,
             assigneeId: userId,
             isActive: true,
           },
@@ -254,18 +263,39 @@ const clockIn = async (req, res) => {
       // Always create daily work record when checking out
       // This ensures every checkout has a corresponding work record for reporting
       console.log(`Creating daily work record for user ${userId}, attendance ${attendance.id}, date ${today}`);
-      console.log(`Task details: taskId=${taskId}, taskStatus=${taskStatus}, workNote=${workNote}`);
+      console.log(`Task details: taskId=${numericTaskId}, taskStatus=${taskStatus}, workNote=${workNote}`);
       
-      const dailyWorkRecord = await DailyWorkRecord.create({
+      const recordData = {
         userId,
         attendanceId: attendance.id,
-        taskId: taskId || null,
+        taskId: numericTaskId || null,
         taskStatus: taskStatus || null,
-        workNote: workNote || (taskId ? null : "General work - no specific task"),
+        workNote: workNote || (numericTaskId ? null : "General work - no specific task"),
         deliverableLink: deliverableLink || null,
         deliverables: deliverables.length > 0 ? deliverables : null,
         date: today,
-      });
+      };
+      let dailyWorkRecord;
+      try {
+        dailyWorkRecord = await DailyWorkRecord.findOne({
+          where: { userId, attendanceId: attendance.id },
+        });
+        if (dailyWorkRecord) {
+          await dailyWorkRecord.update(recordData);
+        } else {
+          dailyWorkRecord = await DailyWorkRecord.create(recordData);
+        }
+      } catch (e) {
+        const name = e?.name || "";
+        const message = e?.message || "Failed to record daily work";
+        if (name.includes("ValidationError")) {
+          return res.status(400).json({ message });
+        }
+        if (name.includes("UniqueConstraintError")) {
+          return res.status(409).json({ message });
+        }
+        throw e;
+      }
 
       console.log(`Daily work record created successfully with ID: ${dailyWorkRecord.id}`);
 

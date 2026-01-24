@@ -1,4 +1,12 @@
-require("dotenv").config();
+const path = require("path");
+const result = require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
+if (result.error) {
+  console.log("DOTENV config failed:", result.error);
+} else {
+  console.log("DOTENV config loaded from:", path.resolve(__dirname, "../.env"));
+}
+console.log("DB_PORT from env:", process.env.DB_PORT);
+console.log("DB_HOST from env:", process.env.DB_HOST);
 
 // Skip database configuration during build phase
 if (process.env.NODE_ENV === 'production' && process.argv.includes('build')) {
@@ -23,17 +31,17 @@ const DB_SSL = getBoolean(process.env.DB_SSL, false);
 // Common database URL configuration if provided
 const dbUrlConfig = DB_URL
   ? {
-      use_env_variable: 'DATABASE_URL',
-      dialect: "mysql",
-      dialectOptions: DB_SSL
-        ? {
-            ssl: {
-              require: true,
-              rejectUnauthorized: false,
-            },
-          }
-        : {},
-    }
+    use_env_variable: 'DATABASE_URL',
+    dialect: "mysql",
+    dialectOptions: DB_SSL
+      ? {
+        ssl: {
+          require: true,
+          rejectUnauthorized: false,
+        },
+      }
+      : {},
+  }
   : {};
 
 module.exports = {
