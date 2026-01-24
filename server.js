@@ -93,10 +93,16 @@ app.get('/', (req, res) => {
 
 // Start Express Server
 
+const { ensureSchema } = require('./utils/schemaFix');
+
 (async () => {
   try {
     await db.sequelize.authenticate();
     console.log("✅ Connected to MySQL database: hrm");
+
+    // Run schema fix before starting server to ensure DB is ready
+    await ensureSchema();
+
     server.listen(PORT, '0.0.0.0', () => console.log(`✅ Server running on port ${PORT}`));
   } catch (error) {
     console.error("❌ Database connection failed:", error);
