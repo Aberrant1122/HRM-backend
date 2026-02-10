@@ -40,14 +40,7 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
       },
       department: {
-        type: DataTypes.ENUM(
-          "development",
-          "design",
-          "seo",
-          "marketing",
-          "content writing",
-          "client"
-        ),
+        type: DataTypes.STRING,
         allowNull: true,
         defaultValue: "development",
       },

@@ -31,6 +31,13 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
       });
+
+      User.hasMany(models.LeaveRequest, {
+        foreignKey: "userId",
+        as: "leaveRequests",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
     }
 
     // Method to compare password

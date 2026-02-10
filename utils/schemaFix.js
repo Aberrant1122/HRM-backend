@@ -12,7 +12,11 @@ const ensureSchema = async () => {
         // Note: usage of MODIFY column is MySQL specific
         await sequelize.query('ALTER TABLE daily_work_records MODIFY COLUMN taskId INT NULL;');
 
-        console.log('✅ Schema check passed: taskId is forced to be nullable.');
+        console.log('🔧 Running startup schema check: Ensuring userInfo.department is VARCHAR...');
+        // Change department from ENUM to VARCHAR to allow any string (e.g. "Human Resources")
+        await sequelize.query("ALTER TABLE userInfo MODIFY COLUMN department VARCHAR(255) NULL DEFAULT 'development';");
+
+        console.log('✅ Schema check passed: taskId is forced to be nullable and department is VARCHAR.');
     } catch (error) {
         // Log error but don't crash the server - it might be that the column is already correct 
         // or there's a different DB issue. We want the server to start anyway.
