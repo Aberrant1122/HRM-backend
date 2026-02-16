@@ -19,13 +19,44 @@ module.exports = (sequelize, DataTypes) => {
         foreignKey: 'taskId',
         as: 'task',
       });
+      Notification.belongsTo(models.Project, {
+        foreignKey: 'projectId',
+        as: 'project',
+      });
     }
   }
   Notification.init({
-    message: DataTypes.STRING,
-    isRead: DataTypes.BOOLEAN,
-    userId: DataTypes.INTEGER,
-    taskId: DataTypes.INTEGER
+    message: {
+      type: DataTypes.STRING,
+      allowNull: false
+    },
+    isRead: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false
+    },
+    userId: {
+      type: DataTypes.INTEGER,
+      allowNull: false
+    },
+    taskId: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    projectId: {
+      type: DataTypes.INTEGER,
+      allowNull: true
+    },
+    type: {
+      type: DataTypes.ENUM('status_change', 'task_completed', 'overdue', 'file_upload', 'task_assigned', 'general'),
+      allowNull: false,
+      defaultValue: 'general'
+    },
+    metadata: {
+      type: DataTypes.JSON,
+      allowNull: true,
+      comment: 'Additional data like old/new status, file names, etc.'
+    }
   }, {
     sequelize,
     modelName: 'Notification',

@@ -46,8 +46,18 @@ module.exports = (sequelize, DataTypes) => {
       validate: {
         isDate: { msg: "Due date must be a valid date" },
         isFutureDate(value) {
-          if (value && new Date(value) < new Date()) {
-            throw new Error('Due date cannot be in the past');
+          if (value) {
+            // Create date objects
+            const dueDate = new Date(value);
+            const today = new Date();
+            
+            // Compare only the date parts (YYYY-MM-DD)
+            const dueDateStr = dueDate.toISOString().split('T')[0];
+            const todayStr = today.toISOString().split('T')[0];
+            
+            if (dueDateStr < todayStr) {
+              throw new Error('Due date cannot be in the past');
+            }
           }
         }
       }

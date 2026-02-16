@@ -1,5 +1,6 @@
 const { Task, User, Project, Notification, UserInfo } = require('../models');
 const { Op } = require('sequelize');
+const NotificationService = require('../utils/notificationService');
 
 class TaskController {
   // Create a new task
@@ -105,12 +106,19 @@ class TaskController {
 
       // Create a notification for the assignee
       if (createdTask.assigneeId) {
-        await Notification.create({
-          message: `You have been assigned a new task: "${createdTask.title}"`,
-          isRead: false,
-          userId: createdTask.assigneeId,
-          taskId: createdTask.id,
-        });
+        try {
+          const io = req.app.get('io');
+          await NotificationService.createNotification({
+            userId: createdTask.assigneeId,
+            message: `You have been assigned a new task: "${createdTask.title}"`,
+            type: 'task_assigned',
+            taskId: createdTask.id,
+            projectId: createdTask.projectId
+          }, io);
+        } catch (notificationError) {
+          console.error('Error creating notification:', notificationError);
+          // Don't fail task creation if notification fails
+        }
       }
 
       res.status(201).json({
@@ -327,18 +335,14 @@ class TaskController {
       // Create notification if assignee changed
       if (updateData.assigneeId && updateData.assigneeId !== oldAssigneeId) {
         try {
-          const notification = await Notification.create({
-            message: `You have been assigned a new task: "${task.title}"`,
-            isRead: false,
-            userId: updateData.assigneeId,
-            taskId: task.id,
-          });
-
-          // Emit socket event to the new assignee
           const io = req.app.get('io');
-          if (io) {
-            io.to(`user_${updateData.assigneeId}`).emit('notification', notification);
-          }
+          await NotificationService.createNotification({
+            userId: updateData.assigneeId,
+            message: `You have been assigned a new task: "${task.title}"`,
+            type: 'task_assigned',
+            taskId: task.id,
+            projectId: task.projectId
+          }, io);
         } catch (notificationError) {
           console.error('Error creating notification:', notificationError);
           // Don't fail the task update if notification creation fails
@@ -575,7 +579,15 @@ class TaskController {
       if (status === 'completed' && !privileged) {
         return res.status(403).json({ success: false, message: 'Only manager or admin can approve completion' });
       }
+
+      const oldStatus = task.status;
       await task.changeStatus(status);
+
+      // Notify client if task is completed
+      if (status === 'completed' && oldStatus !== 'completed') {
+        const io = req.app.get('io');
+        await NotificationService.notifyTaskCompletion(task, io);
+      }
 
       res.json({
         success: true,
@@ -652,18 +664,14 @@ class TaskController {
       // Create notification if assignee changed
       if (assigneeId && assigneeId !== oldAssigneeId) {
         try {
-          const notification = await Notification.create({
-            message: `You have been assigned a new task: "${task.title}"`,
-            isRead: false,
-            userId: assigneeId,
-            taskId: task.id,
-          });
-
-          // Emit socket event to the new assignee
           const io = req.app.get('io');
-          if (io) {
-            io.to(`user_${assigneeId}`).emit('notification', notification);
-          }
+          await NotificationService.createNotification({
+            userId: assigneeId,
+            message: `You have been assigned a new task: "${task.title}"`,
+            type: 'task_assigned',
+            taskId: task.id,
+            projectId: task.projectId
+          }, io);
         } catch (notificationError) {
           console.error('Error creating notification:', notificationError);
           // Don't fail the task assignment if notification creation fails
@@ -801,12 +809,18 @@ class TaskController {
 
       // Create notification for task creator
       if (task.createdBy) {
-        await Notification.create({
-          message: `Deliverables submitted for task: "${task.title}"`,
-          isRead: false,
-          userId: task.createdBy,
-          taskId: task.id,
-        });
+        try {
+          const io = req.app.get('io');
+          await NotificationService.createNotification({
+            userId: task.createdBy,
+            message: `Deliverables submitted for task: "${task.title}"`,
+            type: 'file_upload',
+            taskId: task.id,
+            projectId: task.projectId
+          }, io);
+        } catch (notificationError) {
+          console.error('Error creating notification:', notificationError);
+        }
       }
 
       res.json({

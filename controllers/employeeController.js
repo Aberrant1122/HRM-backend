@@ -1010,6 +1010,12 @@ const updateUserProfile = async (req, res) => {
       reportingManager,
     } = req.body;
 
+    // Log the incoming data for debugging
+    console.log('=== UPDATE PROFILE REQUEST ===');
+    console.log('User ID:', userId);
+    console.log('Request body:', JSON.stringify(req.body, null, 2));
+    console.log('Body keys:', Object.keys(req.body));
+
     const parsedDob = dob ? new Date(dob) : undefined;
 
     // Check if user exists
@@ -1141,6 +1147,21 @@ const updateUserProfile = async (req, res) => {
   } catch (error) {
     await transaction.rollback();
     console.error("Error updating user profile:", error);
+
+    // Handle Sequelize validation errors
+    if (error.name === 'SequelizeValidationError') {
+      const validationErrors = error.errors.map(err => ({
+        field: err.path,
+        message: err.message,
+        value: err.value
+      }));
+      
+      return res.status(400).json({
+        success: false,
+        message: "Validation Error",
+        errors: validationErrors
+      });
+    }
 
     return res.status(500).json({
       success: false,

@@ -1,4 +1,5 @@
 const { Notification, Task } = require('../models');
+const NotificationService = require('../utils/notificationService');
 
 class NotificationController {
   // Get all notifications for a user
@@ -43,12 +44,13 @@ class NotificationController {
       if (!userId || !message) {
         return res.status(400).json({ success: false, message: 'userId and message are required' });
       }
-      const notification = await Notification.create({
+      const io = req.app.get('io');
+      const notification = await NotificationService.createNotification({
         userId,
         message,
         taskId: taskId || null,
-        isRead: false,
-      });
+        type: req.body.type || 'general'
+      }, io);
       res.status(201).json({ success: true, data: notification });
     } catch (error) {
       console.error('Error creating notification:', error);

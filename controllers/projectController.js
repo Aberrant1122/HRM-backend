@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { URL } = require('url');
+const NotificationService = require('../utils/notificationService');
 
 // S3 client for generating read URLs
 const s3 = new S3Client({
@@ -36,23 +37,23 @@ function extractS3KeyFromUrl(maybeUrl) {
         return parts.slice(1).join('/');
       }
     }
-  } catch (_) {}
+  } catch (_) { }
   return null;
 }
 
 async function toReadableAttachmentUrl(stored) {
   if (!stored) return null;
-  
+
   const storedStr = String(stored);
-  
+
   // Local file storage (legacy support for local uploads)
   if (storedStr.startsWith('/uploads/')) {
     return storedStr;
   }
-  
+
   // Normalize malformed URLs (e.g., https// -> https://)
   let normalized = storedStr.replace(/^(https?)\/\//i, '$1://');
-  
+
   // If it's already a full S3 URL (legacy data), extract the key
   let s3Key = null;
   if (/^https?:\/\//i.test(normalized)) {
@@ -62,7 +63,7 @@ async function toReadableAttachmentUrl(stored) {
     // It's already a key (new format)
     s3Key = normalized;
   }
-  
+
   // Generate pre-signed URL for the S3 key
   if (s3Key && S3_BUCKET) {
     try {
@@ -74,7 +75,7 @@ async function toReadableAttachmentUrl(stored) {
       return null;
     }
   }
-  
+
   // Fallback: return as-is
   return normalized;
 }
@@ -155,20 +156,20 @@ class ProjectController {
       // Handle client assignment
       let clientName = null;
       let clientEmail = null;
-      
+
       if (clientId) {
         // Verify client exists and get their information
         const client = await User.findOne({
           where: { id: clientId, role: 'client' }
         });
-        
+
         if (!client) {
           return res.status(400).json({
             success: false,
             message: 'Client not found'
           });
         }
-        
+
         clientName = client.fullName;
         clientEmail = client.email;
       }
@@ -238,6 +239,13 @@ class ProjectController {
       });
 
       const attachmentUrl = await toReadableAttachmentUrl(createdProject.attachment);
+
+      // Notify client about file upload if attachment was added
+      if (attachmentPath && clientEmail) {
+        const io = req.app.get('io');
+        const uploaderName = req.user?.fullName || 'Admin';
+        await NotificationService.notifyFileUpload(project.id, req.file?.originalname || 'attachment', uploaderName, io);
+      }
 
       res.status(201).json({
         success: true,
@@ -425,18 +433,13 @@ class ProjectController {
       // Notify new manager if managerId changed
       if (updateData.managerId && updateData.managerId !== previousManagerId) {
         try {
-          await Notification.create({
-            message: `You have been assigned as manager for project: "${project.name}"`,
-            isRead: false,
-            userId: updateData.managerId,
-          });
           const io = req.app.get('io');
-          if (io) {
-            io.to(`user_${updateData.managerId}`).emit('notification', {
-              message: `You have been assigned as manager for project: "${project.name}"`,
-              isRead: false,
-            });
-          }
+          await NotificationService.createNotification({
+            userId: updateData.managerId,
+            message: `You have been assigned as manager for project: "${project.name}"`,
+            type: 'general',
+            projectId: project.id
+          }, io);
         } catch (e) {
           console.error('Error notifying new manager:', e);
         }
@@ -728,8 +731,13 @@ class ProjectController {
       }
 
       console.log(`Found project: ${project.name}, current status: ${project.status}`);
+      const oldStatus = project.status;
       await project.changeStatus(status);
       console.log(`Status changed successfully to: ${status}`);
+
+      // Notify client about status change
+      const io = req.app.get('io');
+      await NotificationService.notifyProjectStatusChange(id, oldStatus, status, io);
 
       res.json({
         success: true,
