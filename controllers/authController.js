@@ -164,19 +164,29 @@ const inviteEmployee = async (req, res) => {
       const resetUrl = `${baseUrl}/set-password?token=${resetToken}`;
       await transporter.sendMail({
         to: email,
-        subject: "You have been invited to join our HRM system",
+        subject: "Welcome to our HRM System - Account Invitation",
         html: `
-          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-            <p>Hello <strong>${fullName}</strong>,</p>
-            <p>You have been invited to join our HRM system as a <strong>${role}</strong>.</p>
-            <p>Please click the following link to set your password and activate your account:</p>
-            <p style="margin: 20px 0;">
-              <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; rounded: 5px; font-weight: bold;">Set Password</a>
-            </p>
-            <p style="font-size: 0.9em; color: #666;">This link will expire in 24 hours.</p>
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
-            <p>After setting your password, <strong>${fullName}</strong> can login anytime through this link: <br />
-            <a href="https://human-resource-management-production-b7d0.up.railway.app/">https://human-resource-management-production-b7d0.up.railway.app/</a></p>
+          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+            <div style="background-color: #2563eb; padding: 25px; text-align: center;">
+              <h1 style="color: white; margin: 0; font-size: 24px;">Account Invitation</h1>
+            </div>
+            <div style="padding: 30px;">
+              <p>Hello <strong>${fullName}</strong>,</p>
+              <p>You have been officially invited to join our HRM system as a <strong>${role}</strong>.</p>
+              <p>To get started and activate your account, please set your password by clicking the button below:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Set Your Password</a>
+              </div>
+              <p style="font-size: 0.9em; color: #666;"><strong>Note:</strong> This invitation link will expire in 24 hours.</p>
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;" />
+              <p style="font-size: 0.9em;">Once your password is set, you can access your dashboard anytime at:</p>
+              <p style="background-color: #f3f4f6; padding: 10px; border-radius: 4px; text-align: center;">
+                <a href="https://human-resource-management-production-b7d0.up.railway.app/" style="color: #2563eb; text-decoration: none; font-weight: 500;">Go to Portal</a>
+              </p>
+            </div>
+            <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 0.8em; color: #9ca3af;">
+              &copy; ${new Date().getFullYear()} HRM System. All rights reserved.
+            </div>
           </div>
         `,
       });
@@ -457,17 +467,32 @@ const requestPasswordReset = async (req, res) => {
 
     // Send email with reset link
     const baseUrl = getAppUrl(req);
-    const resetUrl = `${baseUrl}/reset-password?token=${resetToken}`;
+    const resetUrl = `${baseUrl}/set-password?token=${resetToken}`;
 
     await transporter.sendMail({
       from: `"HRM System" <${EMAIL_USER}>`,
       to: user.email,
       subject: "Password Reset Request",
       html: `
-        <p>You requested a password reset. Click the link below to set a new password:</p>
-        <p><a href="${resetUrl}">${resetUrl}</a></p>
-        <p>This link will expire in 1 hour.</p>
-        <p>If you didn't request this, please ignore this email.</p>
+        <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <div style="background-color: #2563eb; padding: 20px; text-align: center;">
+            <h1 style="color: white; margin: 0; font-size: 24px;">Password Reset Request</h1>
+          </div>
+          <div style="padding: 30px;">
+            <p>Hello <strong>${user.fullName}</strong>,</p>
+            <p>We received a request to reset the password for your account associated with this email address.</p>
+            <p>Please click the button below to set a new password:</p>
+            <div style="text-align: center; margin: 30px 0;">
+              <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Reset Password</a>
+            </div>
+            <p style="font-size: 0.9em; color: #666;"><strong>Note:</strong> This link will expire in 1 hour for security purposes.</p>
+            <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
+            <p style="font-size: 0.85em; color: #666;">If you did not request a password reset, please ignore this email or contact support if you have concerns. No changes will be made to your account.</p>
+          </div>
+          <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 0.8em; color: #9ca3af;">
+            &copy; ${new Date().getFullYear()} HRM System. All rights reserved.
+          </div>
+        </div>
       `,
     });
 
