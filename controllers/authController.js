@@ -166,11 +166,18 @@ const inviteEmployee = async (req, res) => {
         to: email,
         subject: "You have been invited to join our HRM system",
         html: `
-          <p>Hello ${fullName},</p>
-          <p>You have been invited to join our HRM system as a ${role}.</p>
-          <p>Please click the following link to set your password and activate your account:</p>
-          <p><a href="${resetUrl}">Set Password</a></p>
-          <p>This link will expire in 24 hours.</p>
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <p>Hello <strong>${fullName}</strong>,</p>
+            <p>You have been invited to join our HRM system as a <strong>${role}</strong>.</p>
+            <p>Please click the following link to set your password and activate your account:</p>
+            <p style="margin: 20px 0;">
+              <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; rounded: 5px; font-weight: bold;">Set Password</a>
+            </p>
+            <p style="font-size: 0.9em; color: #666;">This link will expire in 24 hours.</p>
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
+            <p>After setting your password, <strong>${fullName}</strong> can login anytime through this link: <br />
+            <a href="https://human-resource-management-production-b7d0.up.railway.app/">https://human-resource-management-production-b7d0.up.railway.app/</a></p>
+          </div>
         `,
       });
     } catch (emailError) {

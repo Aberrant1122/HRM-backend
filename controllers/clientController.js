@@ -110,20 +110,23 @@ const addClient = async (req, res) => {
     // Send welcome email (outside of transaction)
     try {
       const loginUrl = `${APP_URL}/login`;
+      const productionLoginUrl = "https://human-resource-management-production-b7d0.up.railway.app/";
       await transporter.sendMail({
         to: email,
         subject: "Welcome to HRM System - Client Account Created",
         html: `
-          <h2>Welcome to HRM System</h2>
-          <p>Hello ${fullName},</p>
-          <p>Your client account has been created successfully.</p>
-          <p><strong>Login Credentials:</strong></p>
-          <ul>
-            <li><strong>Email:</strong> ${email}</li>
-            <li><strong>Password:</strong> ${password}</li>
-          </ul>
-          <p>Please login at: <a href="${loginUrl}">${loginUrl}</a></p>
-          <p>For security reasons, we recommend changing your password after your first login.</p>
+          <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+            <p>Hello <strong>${fullName}</strong>,</p>
+            <p>Your client account has been created successfully at HRM System.</p>
+            <p><strong>Login Credentials:</strong></p>
+            <ul>
+              <li><strong>Email:</strong> ${email}</li>
+              <li><strong>Password:</strong> ${password}</li>
+            </ul>
+            <p><strong>${fullName}</strong> can login through this link: <br />
+            <a href="${productionLoginUrl}" style="color: #2563eb; font-weight: bold;">${productionLoginUrl}</a></p>
+            <p style="font-size: 0.9em; color: #666; margin-top: 20px;">For security reasons, we recommend changing your password after your first login.</p>
+          </div>
         `,
       });
     } catch (emailError) {
@@ -298,7 +301,7 @@ const updateClient = async (req, res) => {
     // Check if email is being changed and if it already exists
     if (email && email !== client.email) {
       const existingUser = await User.findOne({
-        where: { 
+        where: {
           email: email,
           id: { [Op.ne]: id } // Exclude current client
         },
@@ -307,8 +310,8 @@ const updateClient = async (req, res) => {
 
       if (existingUser) {
         await transaction.rollback();
-        return res.status(400).json({ 
-          message: "Email address is already in use by another user" 
+        return res.status(400).json({
+          message: "Email address is already in use by another user"
         });
       }
     }
@@ -389,8 +392,8 @@ const changeClientPassword = async (req, res) => {
 
   // Validate password
   if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ 
-      message: "Password must be at least 6 characters long" 
+    return res.status(400).json({
+      message: "Password must be at least 6 characters long"
     });
   }
 
