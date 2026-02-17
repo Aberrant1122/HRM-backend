@@ -1865,3 +1865,5 @@
 {"level":"info","message":"GET /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-02-17T19:53:23.036Z"}
 {"level":"info","message":"✅ Connected to MySQL database: hrm","service":"hrm-backend","timestamp":"2026-02-17T20:04:29.625Z"}
 {"level":"info","message":"✅ Server running on port 5001","service":"hrm-backend","timestamp":"2026-02-17T20:04:29.650Z"}
+{"level":"info","message":"OPTIONS /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-02-17T20:05:23.036Z"}
+{"level":"info","message":"GET /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-02-17T20:05:23.041Z"}
