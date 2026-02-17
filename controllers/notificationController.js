@@ -1,17 +1,39 @@
 const { Notification, Task } = require('../models');
 const NotificationService = require('../utils/notificationService');
+const { getPagination, getPagingData } = require('../utils/pagination');
 
 class NotificationController {
   // Get all notifications for a user
   async getNotifications(req, res) {
     try {
       const { userId } = req.params;
-      const notifications = await Notification.findAll({
+      const { page, limit } = req.query;
+      const { limit: l, offset } = getPagination(page, limit);
+
+      const result = await Notification.findAndCountAll({
         where: { userId },
-        include: [{ model: Task, as: 'task' }],
+        include: [{
+          model: Task,
+          as: 'task',
+          attributes: ['id', 'title']
+        }],
+        attributes: ['id', 'userId', 'message', 'type', 'taskId', 'projectId', 'isRead', 'createdAt'],
         order: [['createdAt', 'DESC']],
+        limit: l,
+        offset,
       });
-      res.json({ success: true, data: notifications });
+
+      const paginatedData = getPagingData(result, page, l);
+
+      res.json({
+        success: true,
+        data: paginatedData.items,
+        pagination: {
+          totalItems: paginatedData.totalItems,
+          totalPages: paginatedData.totalPages,
+          currentPage: paginatedData.currentPage,
+        }
+      });
     } catch (error) {
       console.error('Error fetching notifications:', error);
       res.status(500).json({ success: false, message: 'Failed to fetch notifications' });
@@ -25,12 +47,33 @@ class NotificationController {
       if (!userId) {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
-      const notifications = await Notification.findAll({
+      const { page, limit } = req.query;
+      const { limit: l, offset } = getPagination(page, limit);
+
+      const result = await Notification.findAndCountAll({
         where: { userId },
-        include: [{ model: Task, as: 'task' }],
+        include: [{
+          model: Task,
+          as: 'task',
+          attributes: ['id', 'title']
+        }],
+        attributes: ['id', 'userId', 'message', 'type', 'taskId', 'projectId', 'isRead', 'createdAt'],
         order: [['createdAt', 'DESC']],
+        limit: l,
+        offset,
       });
-      res.json({ success: true, data: notifications });
+
+      const paginatedData = getPagingData(result, page, l);
+
+      res.json({
+        success: true,
+        data: paginatedData.items,
+        pagination: {
+          totalItems: paginatedData.totalItems,
+          totalPages: paginatedData.totalPages,
+          currentPage: paginatedData.currentPage,
+        }
+      });
     } catch (error) {
       console.error('Error fetching notifications:', error);
       res.status(500).json({ success: false, message: 'Failed to fetch notifications' });

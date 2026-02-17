@@ -1,5 +1,6 @@
 const { Department } = require("../models");
 const { Op } = require("sequelize");
+const { getPagination, getPagingData } = require("../utils/pagination");
 
 // Get all active departments
 const getAllDepartments = async (req, res) => {
@@ -37,7 +38,7 @@ const createDepartment = async (req, res) => {
     }
 
     const trimmedName = name.trim();
-    
+
     // Validate name length
     if (trimmedName.length < 2 || trimmedName.length > 100) {
       return res.status(400).json({
@@ -94,7 +95,7 @@ const createDepartment = async (req, res) => {
     });
   } catch (error) {
     console.error("Error creating department:", error);
-    
+
     // Handle unique constraint violation
     if (error.name === "SequelizeUniqueConstraintError") {
       return res.status(409).json({
@@ -139,12 +140,12 @@ const updateDepartment = async (req, res) => {
       // Check if another department with the same name exists
       const allDepartments = await Department.findAll({
         attributes: ['id', 'name'],
-        where: { 
+        where: {
           isActive: true,
           id: { [Op.ne]: id }
         }
       });
-      
+
       const existingDepartment = allDepartments.find(
         dept => dept.name.toLowerCase() === name.trim().toLowerCase()
       );
@@ -246,14 +247,26 @@ const restoreDepartment = async (req, res) => {
 // Get all departments (including inactive ones) - Admin only
 const getAllDepartmentsAdmin = async (req, res) => {
   try {
-    const departments = await Department.findAll({
+    const { page, limit } = req.query;
+    const { limit: l, offset } = getPagination(page, limit);
+
+    const result = await Department.findAndCountAll({
+      attributes: ["id", "name", "description", "isActive", "createdAt"],
       order: [["name", "ASC"]],
-      attributes: ["id", "name", "description", "isActive", "createdAt", "updatedAt"],
+      limit: l,
+      offset,
     });
+
+    const paginatedData = getPagingData(result, page, l);
 
     return res.status(200).json({
       success: true,
-      data: departments,
+      data: paginatedData.items,
+      pagination: {
+        totalItems: paginatedData.totalItems,
+        totalPages: paginatedData.totalPages,
+        currentPage: paginatedData.currentPage,
+      }
     });
   } catch (error) {
     console.error("Error fetching all departments:", error);

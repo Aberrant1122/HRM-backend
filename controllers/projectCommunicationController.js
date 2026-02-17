@@ -1,5 +1,6 @@
 const { ProjectCommunication, User, Project } = require('../models');
 const { Op } = require('sequelize');
+const { getPagination, getPagingData } = require('../utils/pagination');
 
 class ProjectCommunicationController {
   /**
@@ -136,11 +137,11 @@ class ProjectCommunicationController {
   async getProjectMessages(req, res) {
     try {
       const { projectId } = req.params;
-      const { page = 1, limit = 50 } = req.query;
+      const { page, limit } = req.query;
       const userId = req.user.id;
       const userRole = req.user.role;
 
-      const offset = (page - 1) * limit;
+      const { limit: l, offset } = getPagination(page, limit);
 
       // Check if project exists
       const project = await Project.findByPk(projectId);
@@ -154,7 +155,7 @@ class ProjectCommunicationController {
       // Authorization check
       const isAdmin = userRole === 'admin';
       const isManager = userRole === 'manager' && project.managerId === userId;
-      
+
       let isClient = false;
       if (userRole === 'client' && project.clientEmail) {
         const client = await User.findOne({
@@ -183,7 +184,7 @@ class ProjectCommunicationController {
         where.isPrivate = false;
       }
 
-      const { count, rows: messages } = await ProjectCommunication.findAndCountAll({
+      const result = await ProjectCommunication.findAndCountAll({
         where,
         include: [
           {
@@ -192,21 +193,21 @@ class ProjectCommunicationController {
             attributes: ['id', 'fullName', 'email', 'role']
           }
         ],
+        attributes: ['id', 'projectId', 'senderId', 'message', 'attachments', 'isPrivate', 'createdAt'],
         order: [['createdAt', 'ASC']],
-        limit: parseInt(limit),
-        offset: parseInt(offset)
+        limit: l,
+        offset,
       });
 
-      const totalPages = Math.ceil(count / limit);
+      const paginatedData = getPagingData(result, page, l);
 
       res.json({
         success: true,
-        data: messages,
+        data: paginatedData.items,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalItems: count,
-          itemsPerPage: parseInt(limit)
+          currentPage: paginatedData.currentPage,
+          totalPages: paginatedData.totalPages,
+          totalItems: paginatedData.totalItems,
         }
       });
     } catch (error) {

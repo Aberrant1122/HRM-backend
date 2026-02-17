@@ -1,9 +1,9 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/authMiddleware');
+
 const NotificationController = require('../controllers/notificationController');
 
-router.use(authenticate);
+
 
 router.get('/', NotificationController.getMyNotifications);
 router.get('/unread-count', NotificationController.getUnreadCount);

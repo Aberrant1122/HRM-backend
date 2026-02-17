@@ -4,6 +4,7 @@ const { Op } = require("sequelize");
 const { User, UserInfo } = require("../models");
 const { body, validationResult } = require("express-validator");
 const nodemailer = require("nodemailer");
+const { getPagination, getPagingData } = require("../utils/pagination");
 
 // Load environment variables
 const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "gmail";
@@ -185,7 +186,10 @@ const getAllClients = async (req, res) => {
   }
 
   try {
-    const clients = await User.findAll({
+    const { page, limit } = req.query;
+    const { limit: l, offset } = getPagination(page, limit);
+
+    const result = await User.findAndCountAll({
       where: { role: "client" },
       include: [
         {
@@ -208,12 +212,21 @@ const getAllClients = async (req, res) => {
         "lastLogin",
       ],
       order: [["createdAt", "DESC"]],
+      limit: l,
+      offset,
     });
+
+    const paginatedData = getPagingData(result, page, l);
 
     return res.status(200).json({
       message: "Clients retrieved successfully",
-      clients,
-      total: clients.length,
+      clients: paginatedData.items,
+      total: paginatedData.totalItems,
+      pagination: {
+        totalItems: paginatedData.totalItems,
+        totalPages: paginatedData.totalPages,
+        currentPage: paginatedData.currentPage,
+      }
     });
   } catch (error) {
     console.error("Error in getAllClients:", error);
@@ -243,9 +256,10 @@ const getClientById = async (req, res) => {
         {
           model: UserInfo,
           as: "userInfo",
+          attributes: ["id", "userId", "contactNumber", "address", "companyName", "position"]
         },
       ],
-      attributes: { exclude: ["password", "resetToken", "resetTokenExpiry"] },
+      attributes: ["id", "fullName", "email", "role", "status", "createdAt", "lastLogin"],
     });
 
     if (!client) {

@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/authMiddleware');
+
 const ProjectCommunicationController = require('../controllers/projectCommunicationController');
 const { upload } = require('../middleware/upload');
 
-// All routes require authentication
-router.use(authenticate);
+
 
 // Create a new message (with optional file attachments)
 router.post('/', upload.array('files', 5), ProjectCommunicationController.createMessage);

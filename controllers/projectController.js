@@ -1,5 +1,6 @@
 const { Project, User, Task } = require('../models');
 const { Op } = require('sequelize');
+const { getPagination, getPagingData } = require('../utils/pagination');
 const { S3Client, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { URL } = require('url');
@@ -266,8 +267,8 @@ class ProjectController {
   async getAllProjects(req, res) {
     try {
       const {
-        page = 1,
-        limit = 10,
+        page,
+        limit,
         status,
         priority,
         managerId,
@@ -276,7 +277,7 @@ class ProjectController {
         sortOrder = 'DESC'
       } = req.query;
 
-      const offset = (page - 1) * limit;
+      const { limit: l, offset } = getPagination(page, limit);
       const where = { isActive: true };
 
       // Apply filters
@@ -298,7 +299,7 @@ class ProjectController {
         where.managerId = req.user.id;
       }
 
-      const { count, rows: projects } = await Project.findAndCountAll({
+      const result = await Project.findAndCountAll({
         where,
         include: [
           {
@@ -311,18 +312,20 @@ class ProjectController {
             as: 'tasks',
             where: { isActive: true },
             required: false,
-            attributes: ['id', 'status']
+            attributes: ['id', 'status', 'progress']
           }
         ],
+        attributes: ['id', 'name', 'description', 'status', 'priority', 'startDate', 'endDate', 'budget', 'managerId', 'clientName', 'progress', 'attachment', 'createdAt'],
         order: [[sortBy, sortOrder.toUpperCase()]],
-        limit: parseInt(limit),
-        offset: parseInt(offset)
+        limit: l,
+        offset,
+        distinct: true,
       });
 
-      const totalPages = Math.ceil(count / limit);
+      const paginatedData = getPagingData(result, page, l);
 
       // Map attachment to readable URLs
-      const projectsWithUrls = await Promise.all(projects.map(async (p) => ({
+      const projectsWithUrls = await Promise.all(paginatedData.items.map(async (p) => ({
         ...p.get({ plain: true }),
         attachmentUrl: await toReadableAttachmentUrl(p.attachment)
       })));
@@ -331,10 +334,9 @@ class ProjectController {
         success: true,
         data: projectsWithUrls,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalItems: count,
-          itemsPerPage: parseInt(limit)
+          currentPage: paginatedData.currentPage,
+          totalPages: paginatedData.totalPages,
+          totalItems: paginatedData.totalItems,
         }
       });
     } catch (error) {

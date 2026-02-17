@@ -5,16 +5,20 @@ const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "your_secret_key";
 
 // Middleware to authenticate the JWT token
 const authenticate = (req, res, next) => {
-  // Try to get token from Authorization header first, then from query params
-  let token = req.headers["authorization"]?.split(" ")[1];
-  
+  // Try to get token from Authorization header first
+  const authHeader = req.headers["authorization"];
+  let token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+
   // If no token in header, check query params (for download links)
   if (!token && req.query.token) {
     token = req.query.token;
   }
 
   if (!token) {
-    return res.status(403).json({ message: "Access denied" });
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized - Token expired or missing"
+    });
   }
 
   try {
@@ -23,8 +27,11 @@ const authenticate = (req, res, next) => {
     req.user = decoded;
     next();
   } catch (error) {
-    console.error(error);
-    return res.status(401).json({ message: "Invalid or expired token" });
+    console.error(`[Auth Error] ${error.message}`);
+    return res.status(401).json({
+      success: false,
+      message: "Unauthorized - Token expired or missing"
+    });
   }
 };
 
@@ -76,6 +83,7 @@ module.exports = {
     // Get role and normalize to lowercase for comparison
     const userRole = req.user.role?.toLowerCase?.() || req.user.role;
 
+    // Immediate approval for admin or manager role
     if (userRole === "admin" || userRole === "manager") {
       return next();
     }

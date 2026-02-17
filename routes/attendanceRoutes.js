@@ -10,22 +10,22 @@ const {
   getActiveTasksForCheckout,
   getDailyWorkRecords,
 } = require("../controllers/attendanceController");
-const verifyToken = require("../middleware/verifyToken");
+
 const { isAdminOrManager } = require("../middleware/authMiddleware");
 const { uploadTaskDeliverables } = require("../middleware/upload");
 
 // For employees
-router.get("/today", verifyToken, getTodaysAttendance);
-router.get("/weekly", verifyToken, getWeeklyAttendance);
-router.post("/clock-in", verifyToken, clockIn);
-router.post("/clock-out", verifyToken, uploadTaskDeliverables.array("deliverables", 10), clockOut);
-router.get("/active-tasks", verifyToken, getActiveTasksForCheckout);
+router.get("/today", getTodaysAttendance);
+router.get("/weekly", getWeeklyAttendance);
+router.post("/clock-in", clockIn);
+router.post("/clock-out", uploadTaskDeliverables.array("deliverables", 10), clockOut);
+router.get("/active-tasks", getActiveTasksForCheckout);
 
 // For manager/admin
-router.get("/daily-work-records", verifyToken, isAdminOrManager, getDailyWorkRecords);
+router.get("/daily-work-records", isAdminOrManager, getDailyWorkRecords);
 
 // For admin
-router.get("/today-all-employees", verifyToken, getAllUsersTodaysAttendance);
-router.get("/all", verifyToken, getAllAttendance);
+router.get("/today-all-employees", getAllUsersTodaysAttendance);
+router.get("/all", getAllAttendance);
 
 module.exports = router;

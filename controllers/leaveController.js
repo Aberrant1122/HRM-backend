@@ -1,5 +1,6 @@
 const { LeaveRequest, LeaveType, User, UserInfo, Department } = require("../models");
 const { Op, Sequelize } = require("sequelize");
+const { getPagination, getPagingData } = require("../utils/pagination");
 
 // Helper to calculate business days (optional, but let's stick to total calendar days for simplicity unless specified)
 const calculateTotalDays = (start, end, mode) => {
@@ -135,7 +136,10 @@ const applyLeave = async (req, res) => {
 const getMyLeaves = async (req, res) => {
     try {
         const userId = req.user.id;
-        const leaves = await LeaveRequest.findAll({
+        const { page, limit } = req.query;
+        const { limit: l, offset } = getPagination(page, limit);
+
+        const result = await LeaveRequest.findAndCountAll({
             where: { userId },
             include: [
                 {
@@ -144,12 +148,22 @@ const getMyLeaves = async (req, res) => {
                     attributes: ["id", "name", "is_paid"],
                 },
             ],
+            attributes: ["id", "userId", "leaveTypeId", "startDate", "endDate", "totalDays", "leaveMode", "reason", "status", "createdAt"],
             order: [["createdAt", "DESC"]],
+            limit: l,
+            offset,
         });
+
+        const paginatedData = getPagingData(result, page, l);
 
         return res.status(200).json({
             success: true,
-            data: leaves,
+            data: paginatedData.items,
+            pagination: {
+                totalItems: paginatedData.totalItems,
+                totalPages: paginatedData.totalPages,
+                currentPage: paginatedData.currentPage,
+            }
         });
     } catch (error) {
         console.error("Error fetching my leaves:", error);
@@ -167,7 +181,8 @@ const getMyLeaves = async (req, res) => {
 const getTodaysLeaves = async (req, res) => {
     try {
         const today = new Date().toISOString().split("T")[0];
-        const { status, leaveTypeId, department } = req.query;
+        const { status, leaveTypeId, department, page, limit } = req.query;
+        const { limit: l, offset } = getPagination(page, limit);
 
         const where = {
             startDate: { [Op.lte]: today },
@@ -187,8 +202,10 @@ const getTodaysLeaves = async (req, res) => {
                         model: UserInfo,
                         as: "userInfo",
                         attributes: ["department", "position"],
+                        ...(department && { where: { department } })
                     },
                 ],
+                required: !!department
             },
             {
                 model: LeaveType,
@@ -197,23 +214,26 @@ const getTodaysLeaves = async (req, res) => {
             },
         ];
 
-        const leaves = await LeaveRequest.findAll({
+        const result = await LeaveRequest.findAndCountAll({
             where,
             include,
+            attributes: ["id", "userId", "leaveTypeId", "startDate", "endDate", "totalDays", "leaveMode", "reason", "status", "createdAt"],
             order: [["createdAt", "DESC"]],
+            limit: l,
+            offset,
+            distinct: true,
         });
 
-        // Manual filtering for department if provided (since it's nested)
-        let filteredLeaves = leaves;
-        if (department) {
-            filteredLeaves = leaves.filter(
-                (l) => l.user?.userInfo?.department === department
-            );
-        }
+        const paginatedData = getPagingData(result, page, l);
 
         return res.status(200).json({
             success: true,
-            data: filteredLeaves,
+            data: paginatedData.items,
+            pagination: {
+                totalItems: paginatedData.totalItems,
+                totalPages: paginatedData.totalPages,
+                currentPage: paginatedData.currentPage,
+            }
         });
     } catch (error) {
         console.error("Error fetching today's leaves:", error);
@@ -228,13 +248,15 @@ const getTodaysLeaves = async (req, res) => {
 // Get all leaves (Admin)
 const getAllLeaves = async (req, res) => {
     try {
-        const { status, leaveTypeId, userId } = req.query;
+        const { status, leaveTypeId, userId, page, limit } = req.query;
+        const { limit: l, offset } = getPagination(page, limit);
+
         const where = {};
         if (status) where.status = status;
         if (leaveTypeId) where.leaveTypeId = leaveTypeId;
         if (userId) where.userId = userId;
 
-        const leaves = await LeaveRequest.findAll({
+        const result = await LeaveRequest.findAndCountAll({
             where,
             include: [
                 {
@@ -248,12 +270,22 @@ const getAllLeaves = async (req, res) => {
                     attributes: ["id", "name", "is_paid"],
                 },
             ],
+            attributes: ["id", "userId", "leaveTypeId", "startDate", "endDate", "totalDays", "leaveMode", "reason", "status", "createdAt"],
             order: [["createdAt", "DESC"]],
+            limit: l,
+            offset,
         });
+
+        const paginatedData = getPagingData(result, page, l);
 
         return res.status(200).json({
             success: true,
-            data: leaves,
+            data: paginatedData.items,
+            pagination: {
+                totalItems: paginatedData.totalItems,
+                totalPages: paginatedData.totalPages,
+                currentPage: paginatedData.currentPage,
+            }
         });
     } catch (error) {
         console.error("Error fetching all leaves:", error);

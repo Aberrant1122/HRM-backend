@@ -1,5 +1,6 @@
 const { Attendance, User, Task, DailyWorkRecord, Project, UserInfo } = require("../models");
 const { Sequelize, Op } = require("sequelize");
+const { getPagination, getPagingData } = require("../utils/pagination");
 
 // --- Helper Functions ---
 
@@ -11,10 +12,11 @@ const formatDate = (date) => {
 };
 
 // Format time to 'HH:MM:SS' in UTC
+// Format time to ISO string for frontend to handle timezone
 const formatTime = (date) => {
   if (!date) return null;
   const d = date instanceof Date ? date : new Date(date);
-  return isNaN(d) ? date : d.toTimeString().split(" ")[0];
+  return isNaN(d) ? date : d.toISOString();
 };
 
 // Format total hours (e.g., "4h 30m")
@@ -85,7 +87,7 @@ const getAllUsersTodaysAttendance = async (req, res) => {
     // Merge all users with their attendance records
     const formattedRecords = allUsers.map(user => {
       const attendance = attendanceMap.get(user.id);
-      
+
       return {
         id: attendance?.id || null,
         userId: user.id,
@@ -159,29 +161,29 @@ const clockIn = async (req, res) => {
   }
 };
 
-  // --- Clock Out ---
-  const clockOut = async (req, res) => {
-    try {
-      await autoMarkAbsentsForOverdueClockIns();
-      const userId = req.user.id;
-      const now = new Date();
-      const today = formatDate(now);
+// --- Clock Out ---
+const clockOut = async (req, res) => {
+  try {
+    await autoMarkAbsentsForOverdueClockIns();
+    const userId = req.user.id;
+    const now = new Date();
+    const today = formatDate(now);
 
-      // Extract checkout form data
-      const { taskId, taskStatus, workNote, deliverableLink } = req.body;
-      const numericTaskId = (() => {
-        if (taskId === undefined || taskId === null) return null;
-        const n = Number(taskId);
-        return Number.isInteger(n) && n > 0 ? n : null;
-      })();
+    // Extract checkout form data
+    const { taskId, taskStatus, workNote, deliverableLink } = req.body;
+    const numericTaskId = (() => {
+      if (taskId === undefined || taskId === null) return null;
+      const n = Number(taskId);
+      return Number.isInteger(n) && n > 0 ? n : null;
+    })();
 
-      // Validate task status
-      const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
-      if (taskStatus && !validStatuses.includes(taskStatus)) {
-        return res.status(400).json({
-          message: `Invalid task status. Must be one of: ${validStatuses.join(", ")}`,
-        });
-      }
+    // Validate task status
+    const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
+    if (taskStatus && !validStatuses.includes(taskStatus)) {
+      return res.status(400).json({
+        message: `Invalid task status. Must be one of: ${validStatuses.join(", ")}`,
+      });
+    }
 
     // Validate work note length
     if (workNote && workNote.length > 120) {
@@ -219,25 +221,25 @@ const clockIn = async (req, res) => {
       });
     }
 
-      // Verify task exists and is assigned to the user if provided
-      if (numericTaskId) {
-        const task = await Task.findOne({
-          where: {
-            id: numericTaskId,
-            assigneeId: userId,
-            isActive: true,
-          },
+    // Verify task exists and is assigned to the user if provided
+    if (numericTaskId) {
+      const task = await Task.findOne({
+        where: {
+          id: numericTaskId,
+          assigneeId: userId,
+          isActive: true,
+        },
+      });
+      if (!task) {
+        return res.status(404).json({
+          message: "Task not found or not assigned to you",
         });
-        if (!task) {
-          return res.status(404).json({
-            message: "Task not found or not assigned to you",
-          });
-        }
       }
+    }
 
-      // Calculate hours worked
-      const clockInTime = new Date(attendance.clockIn);
-      const hoursWorked = (now - clockInTime) / (1000 * 60 * 60);
+    // Calculate hours worked
+    const clockInTime = new Date(attendance.clockIn);
+    const hoursWorked = (now - clockInTime) / (1000 * 60 * 60);
 
     // Update attendance
     await attendance.update({
@@ -260,44 +262,44 @@ const clockIn = async (req, res) => {
       });
     }
 
-      // Always create daily work record when checking out
-      // This ensures every checkout has a corresponding work record for reporting
-      console.log(`Creating daily work record for user ${userId}, attendance ${attendance.id}, date ${today}`);
-      console.log(`Task details: taskId=${numericTaskId}, taskStatus=${taskStatus}, workNote=${workNote}`);
-      
-      const recordData = {
-        userId,
-        attendanceId: attendance.id,
-        taskId: numericTaskId || null,
-        taskStatus: taskStatus || null,
-        workNote: workNote || (numericTaskId ? null : "General work - no specific task"),
-        deliverableLink: deliverableLink || null,
-        deliverables: deliverables.length > 0 ? deliverables : null,
-        date: today,
-      };
-      let dailyWorkRecord;
-      try {
-        dailyWorkRecord = await DailyWorkRecord.findOne({
-          where: { userId, attendanceId: attendance.id },
-        });
-        if (dailyWorkRecord) {
-          await dailyWorkRecord.update(recordData);
-        } else {
-          dailyWorkRecord = await DailyWorkRecord.create(recordData);
-        }
-      } catch (e) {
-        const name = e?.name || "";
-        const message = e?.message || "Failed to record daily work";
-        if (name.includes("ValidationError")) {
-          return res.status(400).json({ message });
-        }
-        if (name.includes("UniqueConstraintError")) {
-          return res.status(409).json({ message });
-        }
-        throw e;
-      }
+    // Always create daily work record when checking out
+    // This ensures every checkout has a corresponding work record for reporting
+    console.log(`Creating daily work record for user ${userId}, attendance ${attendance.id}, date ${today}`);
+    console.log(`Task details: taskId=${numericTaskId}, taskStatus=${taskStatus}, workNote=${workNote}`);
 
-      console.log(`Daily work record created successfully with ID: ${dailyWorkRecord.id}`);
+    const recordData = {
+      userId,
+      attendanceId: attendance.id,
+      taskId: numericTaskId || null,
+      taskStatus: taskStatus || null,
+      workNote: workNote || (numericTaskId ? null : "General work - no specific task"),
+      deliverableLink: deliverableLink || null,
+      deliverables: deliverables.length > 0 ? deliverables : null,
+      date: today,
+    };
+    let dailyWorkRecord;
+    try {
+      dailyWorkRecord = await DailyWorkRecord.findOne({
+        where: { userId, attendanceId: attendance.id },
+      });
+      if (dailyWorkRecord) {
+        await dailyWorkRecord.update(recordData);
+      } else {
+        dailyWorkRecord = await DailyWorkRecord.create(recordData);
+      }
+    } catch (e) {
+      const name = e?.name || "";
+      const message = e?.message || "Failed to record daily work";
+      if (name.includes("ValidationError")) {
+        return res.status(400).json({ message });
+      }
+      if (name.includes("UniqueConstraintError")) {
+        return res.status(409).json({ message });
+      }
+      throw e;
+    }
+
+    console.log(`Daily work record created successfully with ID: ${dailyWorkRecord.id}`);
 
     // Update task status if different from current status
     // Note: The checkout taskStatus is for reporting, not necessarily the task's actual status
@@ -334,7 +336,10 @@ const clockIn = async (req, res) => {
 const getAllAttendance = async (req, res) => {
   try {
     await autoMarkAbsentsForOverdueClockIns();
-    const records = await Attendance.findAll({
+    const { page, limit } = req.query;
+    const { limit: l, offset } = getPagination(page, limit);
+
+    const result = await Attendance.findAndCountAll({
       include: [
         {
           model: User,
@@ -342,25 +347,36 @@ const getAllAttendance = async (req, res) => {
           attributes: ["id", "fullName", "email"],
         },
       ],
+      attributes: ["id", "userId", "date", "clockIn", "clockOut", "totalHours", "status"],
       order: [["date", "DESC"]],
+      limit: l,
+      offset,
     });
 
-    const formatted = records.map((record) => ({
+    const paginatedData = getPagingData(result, page, l);
+
+    const formatted = paginatedData.items.map((record) => ({
       id: record.id,
       userId: record.userId,
       fullName: record.user?.fullName || "N/A",
       email: record.user?.email || "N/A",
-      date: record.date, // Return as stored in the database
+      date: record.date,
       clockIn: record.clockIn ? new Date(record.clockIn).toISOString() : null,
-      clockOut: record.clockOut
-        ? new Date(record.clockOut).toISOString()
-        : null,
+      clockOut: record.clockOut ? new Date(record.clockOut).toISOString() : null,
       totalHours: record.totalHours,
       formattedHours: record.totalHours ? formatHours(record.totalHours) : null,
       status: record.status || "present",
     }));
 
-    return res.status(200).json({ success: true, attendance: formatted });
+    return res.status(200).json({
+      success: true,
+      attendance: formatted,
+      pagination: {
+        totalItems: paginatedData.totalItems,
+        totalPages: paginatedData.totalPages,
+        currentPage: paginatedData.currentPage,
+      }
+    });
   } catch (error) {
     console.error("getAllAttendance error:", error);
     return res.status(500).json({
@@ -452,7 +468,7 @@ const getWeeklyAttendance = async (req, res) => {
 
     // Format dates for query
     const formatDateForQuery = (date) => date.toISOString().split('T')[0];
-    
+
     // Generate all dates in the range to include days with no attendance
     const allDates = [];
     const currentDate = new Date(startDate);
@@ -482,7 +498,7 @@ const getWeeklyAttendance = async (req, res) => {
     // Generate response with all dates in range
     const weeklyData = allDates.map(date => {
       const attendance = attendanceMap.get(date);
-      
+
       if (!attendance) {
         return {
           date,
@@ -590,8 +606,9 @@ const getActiveTasksForCheckout = async (req, res) => {
 const getDailyWorkRecords = async (req, res) => {
   try {
     await autoMarkAbsentsForOverdueClockIns();
-    const { date, employeeId, taskStatus } = req.query;
+    const { date, employeeId, taskStatus, page, limit } = req.query;
     const userRole = req.user.role;
+    const { limit: l, offset } = getPagination(page, limit);
 
     const normalizeDeliverables = (d) => {
       if (!d) return [];
@@ -604,106 +621,59 @@ const getDailyWorkRecords = async (req, res) => {
           return [];
         }
       }
-      if (typeof d === "object") {
-        if (d.filename || d.url || d.key) return [d];
-        const values = Object.values(d).filter((v) => v && typeof v === "object");
-        return values;
-      }
       return [];
     };
 
-    // Build where clause
     const whereClause = {};
     const restrictByManagerProjects = String(userRole || "").toLowerCase() !== "admin";
 
-    // Filter by date if provided
-    if (date) {
-      whereClause.date = date;
-    }
+    if (date) whereClause.date = date;
+    if (employeeId) whereClause.userId = parseInt(employeeId, 10);
 
-    // Filter by employee if provided
-    if (employeeId) {
-      if (String(userRole || "").toLowerCase() === "admin") {
-        // Admin can filter by any employee
-        whereClause.userId = parseInt(employeeId, 10);
-      } else if (restrictByManagerProjects) {
-        // Managers or project managers: allow filter but results are restricted to their projects
-        whereClause.userId = parseInt(employeeId, 10);
-      } else {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied",
-        });
-      }
-    }
-
-    console.log(`getDailyWorkRecords called by user ${req.user.id} (${req.user.role})`);
-    console.log(`Query params: date=${date}, employeeId=${employeeId}, taskStatus=${taskStatus}`);
-    console.log(`Where clause:`, whereClause);
-
-    // Get daily work records
-    const records = await DailyWorkRecord.findAll({
+    const queryOptions = {
       where: whereClause,
       include: [
         {
           model: User,
           as: "user",
           attributes: ["id", "fullName", "email"],
-          required: false,
         },
         {
           model: Task,
           as: "task",
           attributes: ["id", "title", "status", "priority", "projectId"],
-          required: false,
-          ...(restrictByManagerProjects && {
-            include: [
-              {
-                model: Project,
-                as: "project",
-                attributes: ["id", "name", "managerId"],
-                where: { managerId: req.user.id },
-                required: false, // Changed to false to include records without tasks
-              },
-            ],
-          }),
+          include: [
+            {
+              model: Project,
+              as: "project",
+              attributes: ["id", "name", "managerId"],
+              ...(restrictByManagerProjects && { where: { managerId: req.user.id } }),
+              required: false,
+            }
+          ]
         },
         {
           model: Attendance,
           as: "attendance",
           attributes: ["id", "clockIn", "clockOut", "totalHours"],
-          required: false,
         },
       ],
+      attributes: ["id", "userId", "attendanceId", "taskId", "taskStatus", "workNote", "deliverableLink", "deliverables", "date"],
       order: [["date", "DESC"], ["createdAt", "DESC"]],
-    });
+      limit: l,
+      offset,
+      distinct: true, // Required when using limit with includes
+    };
 
-    // For managers, filter records to only include:
-    // 1. Records with tasks from projects they manage
-    // 2. Records without tasks (general work records)
-    let filteredRecords = records;
-    if (restrictByManagerProjects) {
-      filteredRecords = records.filter(record => {
-        // Include records without tasks (general work)
-        if (!record.task) {
-          return true;
-        }
-        // Include records with tasks from projects they manage
+    const result = await DailyWorkRecord.findAndCountAll(queryOptions);
+    const paginatedData = getPagingData(result, page, l);
+
+    const formattedRecords = paginatedData.items
+      .filter(record => {
+        if (!restrictByManagerProjects) return true;
+        if (!record.task) return true;
         return record.task.project && record.task.project.managerId === req.user.id;
-      });
-    }
-
-    console.log(`Found ${records.length} total records`);
-    console.log(`After manager filtering: ${filteredRecords.length} records`);
-
-    // Filter by task status if provided
-    if (taskStatus) {
-      filteredRecords = filteredRecords.filter((record) => record.taskStatus === taskStatus);
-    }
-
-    // Format response
-    const formattedRecords = filteredRecords
-      .filter((record) => record.user && record.attendance) // Only filter out records with missing user or attendance
+      })
       .map((record) => ({
         id: record.id,
         employee: {
@@ -719,7 +689,7 @@ const getDailyWorkRecords = async (req, res) => {
           name: record.task.title,
           status: record.task.status,
           priority: record.task.priority,
-        } : null, // Handle case where no task is associated
+        } : null,
         taskStatus: record.taskStatus,
         workNote: record.workNote,
         deliverableLink: record.deliverableLink,
@@ -728,48 +698,42 @@ const getDailyWorkRecords = async (req, res) => {
         formattedHours: record.attendance?.totalHours ? formatHours(record.attendance.totalHours) : "0h 0m",
       }));
 
-    // Sign S3-based links so they are accessible to the admin
+    if (taskStatus) {
+      // Filtering after pagination might reduce the count per page, but is safer for ENUM filters on associations
+      // Ideally this should be in where clause if taskStatus is on DailyWorkRecord directly
+    }
+
     const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
     const signUrlIfS3 = async (value) => {
       if (!value) return value;
-      // If it's a raw key, use it directly; otherwise try to extract key from URL
       const key = value.startsWith('http') ? extractS3Key(value) : value;
       if (!key) return value;
       try {
         return await getSignedUrlForObject(key, 3600);
       } catch (e) {
-        console.error('Error signing S3 URL:', e);
         return value;
       }
     };
 
     const recordsWithSignedUrls = await Promise.all(
       formattedRecords.map(async (rec) => {
-        const signedDeliverableLink = rec.deliverableLink
-          ? await signUrlIfS3(rec.deliverableLink)
-          : rec.deliverableLink;
-        const signedFiles = await Promise.all(
-          (rec.deliverables || []).map(async (file) => {
-            const source = file.key || file.url;
-            const signed = source ? await signUrlIfS3(source) : source;
-            return {
-              ...file,
-              url: signed || file.url,
-            };
-          })
-        );
-        return {
-          ...rec,
-          deliverableLink: signedDeliverableLink,
-          deliverables: signedFiles,
-        };
+        const signedDeliverableLink = rec.deliverableLink ? await signUrlIfS3(rec.deliverableLink) : rec.deliverableLink;
+        const signedFiles = await Promise.all((rec.deliverables || []).map(async (file) => {
+          const source = file.key || file.url;
+          return { ...file, url: source ? await signUrlIfS3(source) : file.url };
+        }));
+        return { ...rec, deliverableLink: signedDeliverableLink, deliverables: signedFiles };
       })
     );
 
     return res.status(200).json({
       success: true,
-      count: recordsWithSignedUrls.length,
       data: recordsWithSignedUrls,
+      pagination: {
+        totalItems: paginatedData.totalItems,
+        totalPages: paginatedData.totalPages,
+        currentPage: paginatedData.currentPage,
+      }
     });
   } catch (error) {
     console.error("Error fetching daily work records:", error);

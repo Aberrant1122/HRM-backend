@@ -15,7 +15,7 @@ const {
   changeEmployeePassword,
   updateEmployeeRole,
 } = require("../controllers/employeeController");
-const { authenticate, isAdmin } = require("../middleware/authMiddleware");
+const { isAdmin } = require("../middleware/authMiddleware");
 const {
   handleValidationErrors,
 } = require("../middleware/validationMiddleware");
@@ -46,7 +46,6 @@ router.get(
 // Get all employees with optional user info
 router.get(
   "/all",
-  authenticate,
   [
     query("includeUserInfo")
       .optional()
@@ -60,7 +59,6 @@ router.get(
 // Get bank details for a user
 router.get(
   "/:userId/get-bank-details",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -74,7 +72,6 @@ router.get(
 // Deactivate a user (admin only)
 router.delete(
   "/:userId",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -89,7 +86,6 @@ router.delete(
 // Create or add bank details for a user
 router.post(
   "/:userId/add-bank-details",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -104,7 +100,6 @@ router.post(
 // Update bank details for a user (partial updates allowed)
 router.put(
   "/:userId/update-bank-details",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -119,7 +114,6 @@ router.put(
 // Upload attachments for an employee
 router.post(
   "/:userId/attachments",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -134,7 +128,6 @@ router.post(
 // Remove an attachment for an employee
 router.delete(
   "/:userId/attachments/:attachmentId",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -151,7 +144,6 @@ router.delete(
 // Download employee attachment
 router.get(
   "/:userId/download-attachment/:attachmentId",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -168,7 +160,6 @@ router.get(
 // View employee attachment inline
 router.get(
   "/:userId/view-attachment/:attachmentId",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -185,7 +176,6 @@ router.get(
 // Update user profile
 router.put(
   "/:userId/profile",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -200,7 +190,6 @@ router.put(
 // Upload profile picture
 router.post(
   "/:userId/profile-picture",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -215,7 +204,6 @@ router.post(
 // Delete profile picture
 router.delete(
   "/:userId/profile-picture",
-  authenticate,
   [
     param("userId")
       .isInt({ min: 1 })
@@ -229,7 +217,6 @@ router.delete(
 // Change employee password (admin only)
 router.patch(
   "/:userId/password",
-  authenticate,
   isAdmin,
   [
     param("userId")
@@ -244,7 +231,6 @@ router.patch(
 // Update employee role (admin only)
 router.patch(
   "/:userId/role",
-  authenticate,
   isAdmin,
   [
     param("userId")

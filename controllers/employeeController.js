@@ -2,33 +2,40 @@ const { User, UserInfo, UserBankInfo } = require("../models");
 const { Op } = require("sequelize");
 const { validationResult } = require("express-validator");
 const path = require("path");
+const { getPagination, getPagingData } = require("../utils/pagination");
 
 const getAllEmployeesWithUserInfo = async (req, res) => {
   try {
-    const includeUserInfo = req.body.includeUserInfo !== Boolean(false);
+    const { page, limit, includeUserInfo: includeUserInfoQuery } = req.query;
+    const includeUserInfo = includeUserInfoQuery !== "false";
+    const { limit: l, offset } = getPagination(page, limit);
 
     const queryOptions = {
-      where: { role: "employee" }, // Show all employees including inactive ones
+      where: { role: "employee" },
       ...(includeUserInfo && {
         include: [
           {
             model: UserInfo,
             as: "userInfo",
-            attributes: { exclude: ["id", "userId", "createdAt", "updatedAt"] },
+            attributes: ["id", "department", "position", "contactNumber", "cnic", "startDate"],
           },
         ],
       }),
-      attributes: { exclude: ["password", "resetToken", "resetTokenExpiry"] },
+      attributes: ["id", "fullName", "email", "role", "status", "profilePicture", "lastLogin"],
+      limit: l,
+      offset,
+      order: [["fullName", "ASC"]],
     };
 
-    const employees = await User.findAll(queryOptions);
+    const result = await User.findAndCountAll(queryOptions);
+    const paginatedData = getPagingData(result, page, l);
 
     // Generate signed URLs for profile pictures if they exist
     const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
     const employeesWithSignedUrls = await Promise.all(
-      employees.map(async (employee) => {
+      paginatedData.items.map(async (employee) => {
         const employeeData = employee.toJSON();
-        
+
         if (employeeData.profilePicture && employeeData.profilePicture.includes('s3')) {
           try {
             const key = extractS3Key(employeeData.profilePicture);
@@ -37,10 +44,9 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
             }
           } catch (error) {
             console.error('Error generating signed URL for employee profile picture:', error);
-            // Keep the original URL if signed URL generation fails
           }
         }
-        
+
         return employeeData;
       })
     );
@@ -48,6 +54,11 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
     return res.status(200).json({
       success: true,
       data: employeesWithSignedUrls,
+      pagination: {
+        totalItems: paginatedData.totalItems,
+        totalPages: paginatedData.totalPages,
+        currentPage: paginatedData.currentPage,
+      },
       meta: { includeUserInfo },
     });
   } catch (error) {
@@ -317,7 +328,7 @@ const getUserById = async (req, res) => {
         message: "User not found",
       });
     }
-    
+
 
 
     // Generate signed URL for profile picture if it exists and is an S3 URL
@@ -351,7 +362,7 @@ const getUserById = async (req, res) => {
         attachments = userInfoData.attachments;
       }
     }
-    
+
     const responseData = {
       id: user.id,
       fullName: user.fullName,
@@ -362,7 +373,7 @@ const getUserById = async (req, res) => {
       profilePicture: profilePictureUrl,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
-      ...(userInfoData && { 
+      ...(userInfoData && {
         personalInfo: {
           ...userInfoData,
           // Use parsed attachments
@@ -414,7 +425,7 @@ const deactivateUser = async (req, res) => {
     if (user.role === "employee") {
       // Permanently delete the employee from database
       await user.destroy({ transaction });
-      
+
       await transaction.commit();
 
       return res.status(200).json({
@@ -484,14 +495,14 @@ const addEmployeeAttachments = async (req, res) => {
           console.warn('Skipping invalid file:', file);
           return;
         }
-        
+
         const publicPath = file.location || (file.filename ? `/uploads/employees/${file.filename}` : null);
-        
+
         if (!publicPath) {
           console.warn('Skipping file with no path:', file.originalname);
           return;
         }
-        
+
         attachments.push({
           filename: file.filename || path.basename(publicPath),
           originalName: file.originalname,
@@ -502,10 +513,10 @@ const addEmployeeAttachments = async (req, res) => {
         });
       });
     }
-    
+
     // Get existing attachments and add new ones
     let existingAttachments = userInfo.attachments || [];
-    
+
     // Parse if it's a string
     if (typeof existingAttachments === 'string') {
       try {
@@ -514,11 +525,11 @@ const addEmployeeAttachments = async (req, res) => {
         existingAttachments = [];
       }
     }
-    
+
     if (!Array.isArray(existingAttachments)) {
       existingAttachments = [];
     }
-    
+
     const updatedAttachments = [...existingAttachments, ...attachments];
 
     // Update user info with new attachments
@@ -626,7 +637,7 @@ const removeEmployeeAttachment = async (req, res) => {
           if (fs.existsSync(filePath)) {
             fs.unlinkSync(filePath);
           }
-        } catch (_) {}
+        } catch (_) { }
       }
     } catch (storageErr) {
       await transaction.rollback();
@@ -701,11 +712,11 @@ const downloadEmployeeAttachment = async (req, res) => {
         attachments = [];
       }
     }
-    
+
     if (!Array.isArray(attachments)) {
       attachments = [];
     }
-    
+
     const attachment = attachments.find((att) => att.filename === attachmentId);
 
     if (!attachment) {
@@ -725,12 +736,12 @@ const downloadEmployeeAttachment = async (req, res) => {
     }
 
     const attachmentPath = attachment.path;
-    
+
     // Check if it's a local file
     if (attachmentPath && attachmentPath.startsWith('/uploads/')) {
       const fs = require('fs');
       const filePath = path.join(__dirname, '..', attachmentPath);
-      
+
       // Check if file exists
       if (!fs.existsSync(filePath)) {
         return res.status(404).json({
@@ -753,12 +764,12 @@ const downloadEmployeeAttachment = async (req, res) => {
     // Handle S3 files
     if (attachmentPath && attachmentPath.startsWith('http')) {
       const { getSignedUrlForObject, extractS3Key } = require('../utils/s3Helper');
-      
+
       try {
         console.log('Original attachment path:', attachmentPath);
         const key = extractS3Key(attachmentPath);
         console.log('Extracted S3 key:', key);
-        
+
         if (!key) {
           return res.status(400).json({
             success: false,
@@ -1031,7 +1042,7 @@ const updateUserProfile = async (req, res) => {
     // Check if current user has permission (admin or the user themselves)
     const currentUserId = req.user.id || req.user.userId;
     const isAdmin = req.user.role === "admin";
-    
+
     if (currentUserId !== parseInt(userId) && !isAdmin) {
       await transaction.rollback();
       return res.status(403).json({
@@ -1043,7 +1054,7 @@ const updateUserProfile = async (req, res) => {
     // Check if email is being changed and if it already exists (admin only)
     if (isAdmin && email && email !== user.email) {
       const existingUser = await User.findOne({
-        where: { 
+        where: {
           email: email,
           id: { [Op.ne]: userId } // Exclude current user
         },
@@ -1052,9 +1063,9 @@ const updateUserProfile = async (req, res) => {
 
       if (existingUser) {
         await transaction.rollback();
-        return res.status(400).json({ 
+        return res.status(400).json({
           success: false,
-          message: "Email address is already in use by another user" 
+          message: "Email address is already in use by another user"
         });
       }
     }
@@ -1083,24 +1094,24 @@ const updateUserProfile = async (req, res) => {
         address,
         dob: parsedDob,
       };
-      
+
       // Admins can set work information
       if (isAdmin) {
         if (department !== undefined) createData.department = department;
         if (position !== undefined) createData.position = position;
         if (reportingManager !== undefined) createData.reportingManager = reportingManager;
       }
-      
+
       userInfo = await UserInfo.create(createData, { transaction });
     } else {
       // Update only provided fields
       const updateData = {};
-      
+
       // Personal information - all users can update
       if (contactNumber !== undefined) updateData.contactNumber = contactNumber;
       if (address !== undefined) updateData.address = address;
       if (parsedDob !== undefined) updateData.dob = parsedDob;
-      
+
       // Work information - only admins can update
       if (isAdmin) {
         if (department !== undefined) updateData.department = department;
@@ -1155,7 +1166,7 @@ const updateUserProfile = async (req, res) => {
         message: err.message,
         value: err.value
       }));
-      
+
       return res.status(400).json({
         success: false,
         message: "Validation Error",
@@ -1183,8 +1194,8 @@ const changeEmployeePassword = async (req, res) => {
 
   // Validate password
   if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ 
-      message: "Password must be at least 6 characters long" 
+    return res.status(400).json({
+      message: "Password must be at least 6 characters long"
     });
   }
 
@@ -1221,9 +1232,9 @@ const changeEmployeePassword = async (req, res) => {
 const updateEmployeeRole = async (req, res) => {
   // Check if user is admin
   if (req.user.role !== "admin") {
-    return res.status(403).json({ 
+    return res.status(403).json({
       success: false,
-      message: "Only admins can change employee roles" 
+      message: "Only admins can change employee roles"
     });
   }
 
@@ -1233,9 +1244,9 @@ const updateEmployeeRole = async (req, res) => {
   // Validate role
   const validRoles = ["admin", "employee", "client", "manager"];
   if (!role || !validRoles.includes(role)) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       success: false,
-      message: "Invalid role. Must be one of: admin, employee, client, manager" 
+      message: "Invalid role. Must be one of: admin, employee, client, manager"
     });
   }
 
@@ -1245,9 +1256,9 @@ const updateEmployeeRole = async (req, res) => {
     });
 
     if (!employee) {
-      return res.status(404).json({ 
+      return res.status(404).json({
         success: false,
-        message: "Employee not found" 
+        message: "Employee not found"
       });
     }
 

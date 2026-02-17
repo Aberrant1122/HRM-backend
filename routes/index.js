@@ -9,10 +9,18 @@ const clientRoutes = require("./clientRoutes");
 const departmentRoutes = require("./departmentRoutes");
 const leaveRoutes = require("./leaveRoutes");
 const projectCommunicationRoutes = require("./projectCommunicationRoutes");
+const dashboardRoutes = require("./dashboardRoutes");
+
+const { authenticate } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-router.use("/auth", authRoutes); // Routes from authRoutes.js will be prefixed with /auth
+// Public routes
+router.use("/auth", authRoutes);
+
+// Protected routes (require valid JWT)
+router.use(authenticate);
+
 router.use("/employee", employeeRoutes);
 router.use("/attendance", attendanceRoutes);
 router.use("/tasks", taskRoutes);
@@ -22,5 +30,6 @@ router.use("/clients", clientRoutes);
 router.use("/departments", departmentRoutes);
 router.use("/leaves", leaveRoutes);
 router.use("/project-communications", projectCommunicationRoutes);
+router.use("/dashboard", dashboardRoutes);
 
 module.exports = router;

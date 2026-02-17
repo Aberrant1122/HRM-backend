@@ -1,6 +1,6 @@
 const express = require("express");
 const router = express.Router();
-const verifyToken = require("../middleware/verifyToken");
+
 const { isAdmin } = require("../middleware/authMiddleware");
 const {
     applyLeave,
@@ -18,19 +18,19 @@ const {
 } = require("../controllers/leaveTypeController");
 
 // --- Leave Types (Admin Config) ---
-router.get("/types", verifyToken, getAllLeaveTypes);
-router.post("/types", verifyToken, isAdmin, createLeaveType);
-router.put("/types/:id", verifyToken, isAdmin, updateLeaveType);
-router.patch("/types/:id/toggle", verifyToken, isAdmin, toggleLeaveTypeStatus);
+router.get("/types", getAllLeaveTypes);
+router.post("/types", isAdmin, createLeaveType);
+router.put("/types/:id", isAdmin, updateLeaveType);
+router.patch("/types/:id/toggle", isAdmin, toggleLeaveTypeStatus);
 
 // --- Employee Actions ---
-router.post("/apply", verifyToken, applyLeave);
-router.get("/my-leaves", verifyToken, getMyLeaves);
+router.post("/apply", applyLeave);
+router.get("/my-leaves", getMyLeaves);
 
 // --- Admin Actions ---
-router.get("/admin/today", verifyToken, isAdmin, getTodaysLeaves);
-router.get("/admin/all", verifyToken, isAdmin, getAllLeaves);
-router.patch("/admin/:id/approve", verifyToken, isAdmin, approveLeave);
-router.patch("/admin/:id/reject", verifyToken, isAdmin, rejectLeave);
+router.get("/admin/today", isAdmin, getTodaysLeaves);
+router.get("/admin/all", isAdmin, getAllLeaves);
+router.patch("/admin/:id/approve", isAdmin, approveLeave);
+router.patch("/admin/:id/reject", isAdmin, rejectLeave);
 
 module.exports = router;

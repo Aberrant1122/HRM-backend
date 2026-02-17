@@ -1,6 +1,7 @@
 const { Task, User, Project, Notification, UserInfo } = require('../models');
 const { Op } = require('sequelize');
 const NotificationService = require('../utils/notificationService');
+const { getPagination, getPagingData } = require('../utils/pagination');
 
 class TaskController {
   // Create a new task
@@ -140,8 +141,8 @@ class TaskController {
   async getAllTasks(req, res) {
     try {
       const {
-        page = 1,
-        limit = 10,
+        page,
+        limit,
         status,
         priority,
         assigneeId,
@@ -151,7 +152,7 @@ class TaskController {
         sortOrder = 'DESC'
       } = req.query;
 
-      const offset = (page - 1) * limit;
+      const { limit: l, offset } = getPagination(page, limit);
       const where = { isActive: true };
 
       // Apply filters
@@ -178,6 +179,8 @@ class TaskController {
         const scopeOr = [
           ...(managedProjectIds.length ? [{ projectId: { [Op.in]: managedProjectIds } }] : []),
         ];
+        // Note: this should probably allow them to see tasks assigned to them even if project not managed?
+        // But let's follow existing logic which seems to be project-based scope.
         where[Op.and] = where[Op.and] || [];
         where[Op.and].push({ [Op.or]: scopeOr });
       }
@@ -188,7 +191,7 @@ class TaskController {
         where[Op.and].push({ [Op.or]: searchOr });
       }
 
-      const { count, rows: tasks } = await Task.findAndCountAll({
+      const result = await Task.findAndCountAll({
         where,
         include: [
           {
@@ -207,21 +210,22 @@ class TaskController {
             attributes: ['id', 'fullName', 'email']
           }
         ],
+        attributes: ['id', 'title', 'description', 'status', 'priority', 'dueDate', 'startDate', 'progress', 'assigneeId', 'projectId', 'createdAt'],
         order: [[sortBy, sortOrder.toUpperCase()]],
-        limit: parseInt(limit),
-        offset: parseInt(offset)
+        limit: l,
+        offset,
+        distinct: true
       });
 
-      const totalPages = Math.ceil(count / limit);
+      const paginatedData = getPagingData(result, page, l);
 
       res.json({
         success: true,
-        data: tasks,
+        data: paginatedData.items,
         pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalItems: count,
-          itemsPerPage: parseInt(limit)
+          currentPage: paginatedData.currentPage,
+          totalPages: paginatedData.totalPages,
+          totalItems: paginatedData.totalItems,
         }
       });
     } catch (error) {

@@ -8,12 +8,11 @@ const {
   changeClientPassword,
   validateAddClient,
 } = require("../controllers/clientController");
-const { isAuthenticated, isAdmin } = require("../controllers/authController");
+const { isAdmin } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-// All routes require authentication and admin role
-router.use(isAuthenticated);
+// All routes require authentication (handled globally) and admin role
 router.use(isAdmin);
 
 // Client routes

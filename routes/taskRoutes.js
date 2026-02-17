@@ -1,11 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const taskController = require('../controllers/taskController');
-const verifyToken = require('../middleware/verifyToken');
+
 const { uploadTaskDeliverables } = require('../middleware/upload');
 
-// Apply authentication middleware to all routes
-router.use(verifyToken);
+
 
 // Task CRUD operations
 router.post('/create-task', taskController.createTask);
