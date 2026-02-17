@@ -1,12 +1,21 @@
-const path = require("path");
-const result = require("dotenv").config({ path: path.resolve(__dirname, "../.env") });
-if (result.error) {
-  console.log("DOTENV config failed:", result.error);
+const fs = require("fs");
+const envPath = path.resolve(__dirname, "../.env");
+
+if (fs.existsSync(envPath)) {
+  const result = require("dotenv").config({ path: envPath });
+  if (result.error) {
+    console.warn("DOTENV config failed to parse:", result.error.message);
+  } else {
+    console.log("DOTENV config loaded from:", envPath);
+  }
 } else {
-  console.log("DOTENV config loaded from:", path.resolve(__dirname, "../.env"));
+  if (process.env.NODE_ENV !== "production") {
+    console.warn("DOTENV file not found at:", envPath);
+  }
 }
-console.log("DB_PORT from env:", process.env.DB_PORT);
-console.log("DB_HOST from env:", process.env.DB_HOST);
+
+console.log("DB_PORT from env:", process.env.DB_PORT || "Default (3306)");
+console.log("DB_HOST from env:", process.env.DB_HOST || "Default (127.0.0.1)");
 
 // Skip database configuration during build phase
 if (process.env.NODE_ENV === 'production' && process.argv.includes('build')) {
