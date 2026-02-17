@@ -7,6 +7,7 @@ const {
   getAllUsersTodaysAttendance,
   getTodaysAttendance,
   getWeeklyAttendance,
+  getUserAttendanceHistory,
   getActiveTasksForCheckout,
   getDailyWorkRecords,
 } = require("../controllers/attendanceController");
@@ -17,6 +18,7 @@ const { uploadTaskDeliverables } = require("../middleware/upload");
 // For employees
 router.get("/today", getTodaysAttendance);
 router.get("/weekly", getWeeklyAttendance);
+router.get("/history", getUserAttendanceHistory);
 router.post("/clock-in", clockIn);
 router.post("/clock-out", uploadTaskDeliverables.array("deliverables", 10), clockOut);
 router.get("/active-tasks", getActiveTasksForCheckout);

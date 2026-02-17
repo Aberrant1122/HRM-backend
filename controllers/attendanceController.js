@@ -546,12 +546,82 @@ const getWeeklyAttendance = async (req, res) => {
       summary,
       data: weeklyData
     });
-
   } catch (error) {
     console.error("Error fetching weekly attendance:", error);
     return res.status(500).json({
       success: false,
       message: "Error fetching weekly attendance",
+      error: error.message,
+    });
+  }
+};
+
+// Get attendance history for the authenticated user with pagination and filters
+const getUserAttendanceHistory = async (req, res) => {
+  try {
+    await autoMarkAbsentsForOverdueClockIns();
+    const userId = req.user.id;
+    const { page, limit, startDate, endDate, date, status } = req.query;
+    const { limit: l, offset } = getPagination(page, limit);
+
+    const whereClause = { userId };
+    if (date) {
+      whereClause.date = date;
+    } else if (startDate && endDate) {
+      whereClause.date = { [Op.between]: [startDate, endDate] };
+    } else if (startDate) {
+      whereClause.date = { [Op.gte]: startDate };
+    } else if (endDate) {
+      whereClause.date = { [Op.lte]: endDate };
+    }
+
+    if (status && status !== "all") {
+      whereClause.status = status;
+    }
+
+    const result = await Attendance.findAndCountAll({
+      where: whereClause,
+      attributes: ["id", "userId", "date", "clockIn", "clockOut", "totalHours", "status"],
+      order: [["date", "DESC"]],
+      limit: l,
+      offset,
+    });
+
+    const paginatedData = getPagingData(result, page, l);
+
+    const formatted = paginatedData.items.map((record) => {
+      let totalHours = record.totalHours;
+      if (!totalHours && record.clockIn && record.clockOut) {
+        const msWorked = new Date(record.clockOut) - new Date(record.clockIn);
+        totalHours = msWorked / (1000 * 60 * 60);
+      }
+
+      return {
+        id: record.id,
+        date: record.date,
+        day: new Date(record.date).toLocaleDateString('en-US', { weekday: 'short' }),
+        status: record.status || 'present',
+        clockIn: record.clockIn ? formatTime(record.clockIn) : null,
+        clockOut: record.clockOut ? formatTime(record.clockOut) : null,
+        totalHours: totalHours || 0,
+        formattedHours: totalHours ? formatHours(totalHours) : '0h 0m'
+      };
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: formatted,
+      pagination: {
+        totalItems: paginatedData.totalItems,
+        totalPages: paginatedData.totalPages,
+        currentPage: paginatedData.currentPage,
+      }
+    });
+  } catch (error) {
+    console.error("getUserAttendanceHistory error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Failed to fetch attendance history",
       error: error.message,
     });
   }
@@ -752,6 +822,7 @@ module.exports = {
   getAllUsersTodaysAttendance,
   getTodaysAttendance,
   getWeeklyAttendance,
+  getUserAttendanceHistory,
   getActiveTasksForCheckout,
   getDailyWorkRecords,
 };
