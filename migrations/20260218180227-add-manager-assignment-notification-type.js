@@ -4,7 +4,7 @@ module.exports = {
   async up(queryInterface, Sequelize) {
     // Add 'manager_assignment' to the notification type enum
     await queryInterface.sequelize.query(`
-      ALTER TABLE notifications 
+      ALTER TABLE Notifications 
       MODIFY COLUMN type ENUM(
         'status_change', 
         'task_completed', 
@@ -20,7 +20,7 @@ module.exports = {
   async down(queryInterface, Sequelize) {
     // Revert back to original enum values
     await queryInterface.sequelize.query(`
-      ALTER TABLE notifications 
+      ALTER TABLE Notifications 
       MODIFY COLUMN type ENUM(
         'status_change', 
         'task_completed', 
