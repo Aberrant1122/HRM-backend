@@ -124,8 +124,8 @@ class DashboardController {
                 let totalWorkMinutes = 0;
                 weeklyAttendance.forEach(att => {
                     if (att.clockIn && att.clockOut) {
-                        const checkIn = new Date(`${att.date}T${att.clockIn}`);
-                        const checkOut = new Date(`${att.date}T${att.clockOut}`);
+                        const checkIn = new Date(att.clockIn);
+                        const checkOut = new Date(att.clockOut);
                         totalWorkMinutes += (checkOut - checkIn) / (1000 * 60);
                     }
                 });
