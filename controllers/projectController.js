@@ -241,6 +241,22 @@ class ProjectController {
 
       const attachmentUrl = await toReadableAttachmentUrl(createdProject.attachment);
 
+      // Notify the assigned manager about their new project
+      if (resolvedManagerId) {
+        try {
+          const io = req.app.get('io');
+          await NotificationService.notifyManagerAssignment(
+            resolvedManagerId,
+            project.id,
+            project.name,
+            io
+          );
+        } catch (notifError) {
+          console.error('Error notifying manager assignment:', notifError);
+          // Don't fail the project creation if notification fails
+        }
+      }
+
       // Notify client about file upload if attachment was added
       if (attachmentPath && clientEmail) {
         const io = req.app.get('io');
@@ -436,14 +452,15 @@ class ProjectController {
       if (updateData.managerId && updateData.managerId !== previousManagerId) {
         try {
           const io = req.app.get('io');
-          await NotificationService.createNotification({
-            userId: updateData.managerId,
-            message: `You have been assigned as manager for project: "${project.name}"`,
-            type: 'general',
-            projectId: project.id
-          }, io);
-        } catch (e) {
-          console.error('Error notifying new manager:', e);
+          await NotificationService.notifyManagerAssignment(
+            updateData.managerId,
+            project.id,
+            project.name,
+            io
+          );
+        } catch (notifError) {
+          console.error('Error notifying new manager:', notifError);
+          // Don't fail the update if notification fails
         }
       }
 

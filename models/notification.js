@@ -48,7 +48,7 @@ module.exports = (sequelize, DataTypes) => {
       allowNull: true
     },
     type: {
-      type: DataTypes.ENUM('status_change', 'task_completed', 'overdue', 'file_upload', 'task_assigned', 'general'),
+      type: DataTypes.ENUM('status_change', 'task_completed', 'overdue', 'file_upload', 'task_assigned', 'manager_assignment', 'general'),
       allowNull: false,
       defaultValue: 'general'
     },

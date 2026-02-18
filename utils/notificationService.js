@@ -200,6 +200,29 @@ class NotificationService {
   }
 
   /**
+   * Notify user about being assigned as project manager
+   */
+  static async notifyManagerAssignment(userId, projectId, projectName, io = null) {
+    try {
+      const message = `You have been assigned as manager for project: "${projectName}"`;
+      
+      return await this.createNotification({
+        userId,
+        message,
+        type: 'manager_assignment',
+        projectId,
+        metadata: { 
+          projectName,
+          assignedAt: new Date()
+        }
+      }, io);
+    } catch (error) {
+      console.error('Error notifying manager assignment:', error);
+      return null;
+    }
+  }
+
+  /**
    * Batch notify clients about overdue tasks
    */
   static async notifyOverdueTasks(io = null) {

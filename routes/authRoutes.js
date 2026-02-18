@@ -13,6 +13,7 @@ const {
   isAuthenticated,
   isAdmin,
   isEmployee,
+  checkIsProjectManager,
 } = require("../controllers/authController");
 
 const router = express.Router();
@@ -26,6 +27,9 @@ router.get("/validate-invite", validateInviteToken);
 
 // Protected routes
 router.use(isAuthenticated);
+
+// Check if user is a project manager (available to all authenticated users)
+router.get("/check-project-manager", checkIsProjectManager);
 
 // Employee routes
 // router.use(isEmployee);

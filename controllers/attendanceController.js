@@ -11,12 +11,29 @@ const formatDate = (date) => {
   return isNaN(d) ? date : d.toISOString().split("T")[0];
 };
 
-// Format time to 'HH:MM:SS' in UTC
-// Format time to ISO string for frontend to handle timezone
+// Format time to 'HH:MM:SS' in local timezone (for display in tables)
+const formatTimeSimple = (date) => {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  if (isNaN(d)) return date;
+  
+  // Return time in HH:MM:SS format
+  // The database is configured with timezone +05:00 (PKT), so times are stored correctly
+  const hours = d.getHours().toString().padStart(2, '0');
+  const minutes = d.getMinutes().toString().padStart(2, '0');
+  const seconds = d.getSeconds().toString().padStart(2, '0');
+  
+  return `${hours}:${minutes}:${seconds}`;
+};
+
+// Format time to ISO string (for frontend date parsing)
 const formatTime = (date) => {
   if (!date) return null;
   const d = date instanceof Date ? date : new Date(date);
-  return isNaN(d) ? date : d.toISOString();
+  if (isNaN(d)) return date;
+  
+  // Return ISO string for frontend to parse correctly
+  return d.toISOString();
 };
 
 // Format total hours (e.g., "4h 30m")
@@ -678,6 +695,7 @@ const getDailyWorkRecords = async (req, res) => {
     await autoMarkAbsentsForOverdueClockIns();
     const { date, employeeId, taskStatus, page, limit } = req.query;
     const userRole = req.user.role;
+    const userId = req.user.id;
     const { limit: l, offset } = getPagination(page, limit);
 
     const normalizeDeliverables = (d) => {
@@ -695,11 +713,12 @@ const getDailyWorkRecords = async (req, res) => {
     };
 
     const whereClause = {};
-    const restrictByManagerProjects = String(userRole || "").toLowerCase() !== "admin";
+    const isAdmin = String(userRole || "").toLowerCase() === "admin";
 
     if (date) whereClause.date = date;
     if (employeeId) whereClause.userId = parseInt(employeeId, 10);
 
+    // Build query options based on role
     const queryOptions = {
       where: whereClause,
       include: [
@@ -712,13 +731,20 @@ const getDailyWorkRecords = async (req, res) => {
           model: Task,
           as: "task",
           attributes: ["id", "title", "status", "priority", "projectId"],
+          required: !isAdmin, // For managers, only include records with tasks
           include: [
             {
               model: Project,
               as: "project",
               attributes: ["id", "name", "managerId"],
-              ...(restrictByManagerProjects && { where: { managerId: req.user.id } }),
-              required: false,
+              required: !isAdmin, // For managers, require project to exist
+              // For managers, filter by their managed projects
+              ...(!isAdmin && { 
+                where: { 
+                  managerId: userId,
+                  isActive: true 
+                } 
+              }),
             }
           ]
         },
@@ -738,35 +764,33 @@ const getDailyWorkRecords = async (req, res) => {
     const result = await DailyWorkRecord.findAndCountAll(queryOptions);
     const paginatedData = getPagingData(result, page, l);
 
-    const formattedRecords = paginatedData.items
-      .filter(record => {
-        if (!restrictByManagerProjects) return true;
-        if (!record.task) return true;
-        return record.task.project && record.task.project.managerId === req.user.id;
-      })
-      .map((record) => ({
-        id: record.id,
-        employee: {
-          id: record.user?.id || 0,
-          name: record.user?.fullName || "Unknown",
-          email: record.user?.email || "",
-        },
-        date: record.date,
-        checkIn: record.attendance?.clockIn ? formatTime(record.attendance.clockIn) : null,
-        checkOut: record.attendance?.clockOut ? formatTime(record.attendance.clockOut) : null,
-        task: record.task ? {
-          id: record.task.id,
-          name: record.task.title,
-          status: record.task.status,
-          priority: record.task.priority,
+    const formattedRecords = paginatedData.items.map((record) => ({
+      id: record.id,
+      employee: {
+        id: record.user?.id || 0,
+        name: record.user?.fullName || "Unknown",
+        email: record.user?.email || "",
+      },
+      date: record.date,
+      checkIn: record.attendance?.clockIn ? formatTimeSimple(record.attendance.clockIn) : null,
+      checkOut: record.attendance?.clockOut ? formatTimeSimple(record.attendance.clockOut) : null,
+      task: record.task ? {
+        id: record.task.id,
+        name: record.task.title,
+        status: record.task.status,
+        priority: record.task.priority,
+        project: record.task.project ? {
+          id: record.task.project.id,
+          name: record.task.project.name,
         } : null,
-        taskStatus: record.taskStatus,
-        workNote: record.workNote,
-        deliverableLink: record.deliverableLink,
-        deliverables: normalizeDeliverables(record.deliverables),
-        totalHours: record.attendance?.totalHours || 0,
-        formattedHours: record.attendance?.totalHours ? formatHours(record.attendance.totalHours) : "0h 0m",
-      }));
+      } : null,
+      taskStatus: record.taskStatus,
+      workNote: record.workNote,
+      deliverableLink: record.deliverableLink,
+      deliverables: normalizeDeliverables(record.deliverables),
+      totalHours: record.attendance?.totalHours || 0,
+      formattedHours: record.attendance?.totalHours ? formatHours(record.attendance.totalHours) : "0h 0m",
+    }));
 
     if (taskStatus) {
       // Filtering after pagination might reduce the count per page, but is safer for ENUM filters on associations

@@ -537,6 +537,44 @@ const validateInviteToken = async (req, res) => {
   }
 };
 
+// Check if user is a project manager
+const checkIsProjectManager = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const userRole = req.user.role?.toLowerCase?.() || req.user.role;
+
+    // If user already has manager or admin role, return true
+    if (userRole === "manager" || userRole === "admin") {
+      return res.status(200).json({
+        success: true,
+        isProjectManager: true,
+        role: userRole,
+      });
+    }
+
+    // Check if user is assigned as a manager to any active project
+    const { Project } = require("../models");
+    const managedProject = await Project.findOne({
+      where: { managerId: userId, isActive: true },
+      attributes: ["id", "name"],
+    });
+
+    return res.status(200).json({
+      success: true,
+      isProjectManager: !!managedProject,
+      role: userRole,
+      managedProject: managedProject ? { id: managedProject.id, name: managedProject.name } : null,
+    });
+  } catch (error) {
+    console.error("Error checking project manager status:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error checking manager status",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   inviteEmployee,
   login,
@@ -552,6 +590,7 @@ module.exports = {
   isAdmin,
   isEmployee,
   isClient,
+  checkIsProjectManager,
   // For testing only
   _test: {
     transporter,
