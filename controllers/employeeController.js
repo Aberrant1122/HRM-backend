@@ -6,26 +6,29 @@ const { getPagination, getPagingData } = require("../utils/pagination");
 
 const getAllEmployeesWithUserInfo = async (req, res) => {
   try {
-    const { page, limit, includeUserInfo: includeUserInfoQuery } = req.query;
-    const includeUserInfo = includeUserInfoQuery !== "false";
+    const { page, limit, includeUserInfo: includeUserInfoQuery, department } = req.query;
+    const includeUserInfo = includeUserInfoQuery !== "false" || !!department;
     const { limit: l, offset } = getPagination(page, limit);
 
     const queryOptions = {
-      where: { role: "employee" },
-      ...(includeUserInfo && {
-        include: [
-          {
-            model: UserInfo,
-            as: "userInfo",
-            attributes: ["id", "department", "position", "contactNumber", "cnic", "startDate"],
-          },
-        ],
-      }),
+      where: {
+        role: "employee"
+      },
+      include: [],
       attributes: ["id", "fullName", "email", "role", "status", "profilePicture", "lastLogin"],
       limit: l,
       offset,
       order: [["fullName", "ASC"]],
     };
+
+    if (includeUserInfo) {
+      queryOptions.include.push({
+        model: UserInfo,
+        as: "userInfo",
+        attributes: ["id", "department", "position", "contactNumber", "cnic", "startDate"],
+        ...(department && { where: { department } })
+      });
+    }
 
     const result = await User.findAndCountAll(queryOptions);
     const paginatedData = getPagingData(result, page, l);
