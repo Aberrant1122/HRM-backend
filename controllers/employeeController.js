@@ -284,8 +284,9 @@ const getUserBankDetails = async (req, res) => {
     });
 
     if (!bankInfo) {
-      return res.status(404).json({
-        success: false,
+      return res.status(200).json({
+        success: true,
+        data: null,
         message: "Bank information not found for this user",
       });
     }
@@ -448,7 +449,7 @@ const deactivateUser = async (req, res) => {
         }, 0);
 
         const projectNames = managedProjects.map(p => p.name).join(", ");
-        
+
         // Delete all tasks associated with these projects first
         for (const project of managedProjects) {
           if (project.tasks && project.tasks.length > 0) {

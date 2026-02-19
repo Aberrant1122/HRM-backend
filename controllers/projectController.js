@@ -506,17 +506,11 @@ class ProjectController {
         });
       }
 
-      // Check if project has active tasks
-      const activeTasks = await Task.count({
-        where: { projectId: id, isActive: true }
-      });
-
-      if (activeTasks > 0) {
-        return res.status(400).json({
-          success: false,
-          message: 'Cannot delete project with active tasks. Please complete or reassign tasks first.'
-        });
-      }
+      // Soft-delete associated tasks
+      await Task.update(
+        { isActive: false },
+        { where: { projectId: id, isActive: true } }
+      );
 
       // Soft delete by setting isActive to false
       await project.update({ isActive: false });

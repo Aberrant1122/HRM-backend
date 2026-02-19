@@ -552,10 +552,16 @@ const checkIsProjectManager = async (req, res) => {
       });
     }
 
-    // Check if user is assigned as a manager to any active project
+    // Check if user is assigned as a manager to any project that is NOT completed or cancelled
     const { Project } = require("../models");
     const managedProject = await Project.findOne({
-      where: { managerId: userId, isActive: true },
+      where: {
+        managerId: userId,
+        isActive: true,
+        status: {
+          [Sequelize.Op.notIn]: ["completed", "cancelled"]
+        }
+      },
       attributes: ["id", "name"],
     });
 

@@ -66,7 +66,7 @@ class DashboardController {
                     pendingLeaves,
                     performance: `${performance}%`
                 };
-            } else if (userRole === 'manager') {
+            } else if (userRole === 'manager' || (userRole === 'employee' && req.query.view === 'manager')) {
                 const [managedProjects, taskStats] = await Promise.all([
                     Project.findAll({ where: { managerId: userId, isActive: true }, attributes: ['id', 'name', 'status', 'description', 'startDate', 'endDate'] }),
                     Task.findAll({
@@ -99,7 +99,7 @@ class DashboardController {
                     inProgressTasks,
                     pendingTasks,
                     overdueTasks,
-                    activeProjects: managedProjects.filter(p => p.status === 'active' || p.status === 'in-progress').length
+                    activeProjects: managedProjects.filter(p => !['completed', 'cancelled'].includes(p.status?.toLowerCase?.() || p.status)).length
                 };
                 summary.managedProjects = managedProjects.slice(0, 3);
             } else if (userRole === 'employee') {
