@@ -38,6 +38,21 @@ module.exports = (sequelize, DataTypes) => {
         onDelete: "CASCADE",
         onUpdate: "CASCADE",
       });
+
+      // Payroll Associations
+      User.hasOne(models.PayrollProfile, {
+        foreignKey: "employee_id",
+        as: "payrollProfile",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
+
+      User.hasMany(models.EmployeePayroll, {
+        foreignKey: "employee_id",
+        as: "payrolls",
+        onDelete: "CASCADE",
+        onUpdate: "CASCADE",
+      });
     }
 
     // Method to compare password

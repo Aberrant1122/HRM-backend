@@ -67,7 +67,14 @@ module.exports = (sequelize, DataTypes) => {
             modelName: "LeaveRequest",
             tableName: "leave_requests",
             timestamps: true,
+            indexes: [
+                {
+                    fields: ["userId", "status", "startDate", "endDate"],
+                    name: "idx_leave_user_status_date"
+                }
+            ]
         }
+
     );
 
     return LeaveRequest;

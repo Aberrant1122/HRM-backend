@@ -1,0 +1,96 @@
+╔════════════════════════════════════════════════════════════════╗
+║                                                                ║
+║          🚨 BACKEND SERVER RESTART REQUIRED 🚨                ║
+║                                                                ║
+╚════════════════════════════════════════════════════════════════╝
+
+The PayrollAdjustment fix is ALREADY IN THE CODE.
+You just need to RESTART the server for it to take effect!
+
+═══════════════════════════════════════════════════════════════
+
+STEP 1: STOP THE CURRENT SERVER
+────────────────────────────────
+
+Find the terminal/command prompt running the backend server.
+
+Press: Ctrl + C
+
+Wait until you see the process has stopped.
+
+═══════════════════════════════════════════════════════════════
+
+STEP 2: START THE SERVER AGAIN
+────────────────────────────────
+
+In the terminal, run:
+
+    cd hrm-backend
+    npm start
+
+OR if you prefer development mode with auto-restart:
+
+    npm run dev
+
+═══════════════════════════════════════════════════════════════
+
+STEP 3: VERIFY IT WORKED
+────────────────────────────────
+
+Look for this in the console output:
+
+    ✅ PayrollAdjustment model loaded successfully
+    ✅ Database connection has been established successfully.
+
+═══════════════════════════════════════════════════════════════
+
+STEP 4: TEST THE FIX
+────────────────────────────────
+
+1. Open browser: http://localhost:3000/admin/payroll/7
+2. Click "Add Adjustment" button
+3. Fill the form and click "Apply Adjustment"
+4. Should work! ✅
+
+═══════════════════════════════════════════════════════════════
+
+ALTERNATIVE: USE PM2 (if installed)
+────────────────────────────────
+
+    pm2 restart hrm-backend
+
+OR restart all PM2 processes:
+
+    pm2 restart all
+
+═══════════════════════════════════════════════════════════════
+
+TROUBLESHOOTING
+────────────────────────────────
+
+If still not working after restart:
+
+1. Check if multiple servers are running:
+   
+   Windows:
+   netstat -ano | findstr :5005
+   
+   Kill the process:
+   taskkill /F /PID <PID_NUMBER>
+
+2. Clear cache and restart:
+   
+   rm -rf node_modules/.cache
+   npm start
+
+3. Verify the code change is there:
+   
+   grep "PayrollAdjustment" controllers/payrollController.js
+   
+   Should show: const PayrollAdjustment = db.PayrollAdjustment;
+
+═══════════════════════════════════════════════════════════════
+
+THAT'S IT! Just restart the server and it will work! 🎉
+
+═══════════════════════════════════════════════════════════════

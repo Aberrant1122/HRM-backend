@@ -1,6 +1,7 @@
 const { Attendance, User, Task, DailyWorkRecord, Project, UserInfo } = require("../models");
 const { Sequelize, Op } = require("sequelize");
 const { getPagination, getPagingData } = require("../utils/pagination");
+let lastAutoMarkTime = 0;
 
 // --- Helper Functions ---
 
@@ -16,13 +17,13 @@ const formatTimeSimple = (date) => {
   if (!date) return null;
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d)) return date;
-  
+
   // Return time in HH:MM:SS format
   // The database is configured with timezone +05:00 (PKT), so times are stored correctly
   const hours = d.getHours().toString().padStart(2, '0');
   const minutes = d.getMinutes().toString().padStart(2, '0');
   const seconds = d.getSeconds().toString().padStart(2, '0');
-  
+
   return `${hours}:${minutes}:${seconds}`;
 };
 
@@ -31,7 +32,7 @@ const formatTime = (date) => {
   if (!date) return null;
   const d = date instanceof Date ? date : new Date(date);
   if (isNaN(d)) return date;
-  
+
   // Return ISO string for frontend to parse correctly
   return d.toISOString();
 };
@@ -44,17 +45,26 @@ const formatHours = (hours) => {
 };
 
 const autoMarkAbsentsForOverdueClockIns = async () => {
+  const now = Date.now();
+  // Only run once per hour to avoid spamming the database with update queries
+  if (now - lastAutoMarkTime < 3600000) return;
+
+  lastAutoMarkTime = now;
   const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  await Attendance.update(
-    { status: "absent", totalHours: 0 },
-    {
-      where: {
-        clockOut: null,
-        clockIn: { [Op.lte]: threshold },
-        status: { [Op.ne]: "absent" },
-      },
-    }
-  );
+  try {
+    await Attendance.update(
+      { status: "absent", totalHours: 0 },
+      {
+        where: {
+          clockOut: null,
+          clockIn: { [Op.lte]: threshold },
+          status: { [Op.ne]: "absent" },
+        },
+      }
+    );
+  } catch (error) {
+    console.error("Error in autoMarkAbsentsForOverdueClockIns:", error);
+  }
 };
 
 const getAllUsersTodaysAttendance = async (req, res) => {
@@ -739,11 +749,11 @@ const getDailyWorkRecords = async (req, res) => {
               attributes: ["id", "name", "managerId"],
               required: !isAdmin, // For managers, require project to exist
               // For managers, filter by their managed projects
-              ...(!isAdmin && { 
-                where: { 
+              ...(!isAdmin && {
+                where: {
                   managerId: userId,
-                  isActive: true 
-                } 
+                  isActive: true
+                }
               }),
             }
           ]

@@ -47,6 +47,18 @@ const authorizeRole = (roles) => {
   };
 };
 
+// Middleware to check if user is an admin or HR
+const isPayrollAdmin = (req, res, next) => {
+  const role = req.user?.role?.toLowerCase();
+  if (role === "admin" || role === "hr") {
+    return next();
+  }
+  return res.status(403).json({
+    success: false,
+    message: "Access denied: Admin or HR privileges required",
+  });
+};
+
 // Middleware to check if user is an admin
 const isAdmin = (req, res, next) => {
   if (req.user && req.user.role === "admin") {
@@ -62,6 +74,7 @@ module.exports = {
   authenticate,
   authorizeRole,
   isAdmin,
+  isPayrollAdmin,
   isManager: (req, res, next) => {
     if (req.user && req.user.role === "manager") {
       return next();

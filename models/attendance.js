@@ -42,11 +42,11 @@ module.exports = (sequelize, DataTypes) => {
     // Method to convert hours to HH:MM format
     getHoursFormat(hours) {
       if (hours === null || hours === undefined) return null;
-      
+
       // Get hours and minutes from the decimal value
       const hoursPart = Math.floor(hours);
       const minutesPart = Math.floor((hours - hoursPart) * 60);
-      
+
       // Format as HH:MM
       return `${hoursPart.toString().padStart(2, '0')}:${minutesPart.toString().padStart(2, '0')}`;
     }
@@ -90,7 +90,14 @@ module.exports = (sequelize, DataTypes) => {
       modelName: "Attendance",
       tableName: "attendances",
       timestamps: true,
+      indexes: [
+        {
+          fields: ["userId", "date"],
+          name: "idx_attendance_user_date"
+        }
+      ]
     }
+
   );
 
   return Attendance;
