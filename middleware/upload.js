@@ -134,7 +134,7 @@ if (bucket) {
   const localProfileDir = path.join(__dirname, '..', 'uploads', 'profile-pictures');
   try {
     fs.mkdirSync(localProfileDir, { recursive: true });
-  } catch (_) {}
+  } catch (_) { }
   profilePictureStorage = multer.diskStorage({
     destination: function (req, file, cb) {
       cb(null, localProfileDir);

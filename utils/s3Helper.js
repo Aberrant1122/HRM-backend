@@ -61,7 +61,7 @@ function extractS3Key(urlOrPath) {
 
   try {
     const url = new URL(urlOrPath);
-    
+
     // For S3 URLs like https://bucket.s3.region.amazonaws.com/key
     if (url.hostname.includes('.s3.') || url.hostname.includes('.s3-')) {
       return url.pathname.substring(1); // Remove leading slash

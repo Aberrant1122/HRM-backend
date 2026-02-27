@@ -82,7 +82,7 @@ db.Sequelize = Sequelize;
     console.log(`✅ Database connection has been established successfully.`);
 
     // Sync models is handled via migrations to avoid implicit ALTERs
-    
+
     // If you need to bootstrap in dev, consider: await sequelize.sync({ force: false })
     // Left intentionally disabled to prevent duplicate indexes/constraints
   } catch (error) {

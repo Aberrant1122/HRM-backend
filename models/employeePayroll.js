@@ -105,7 +105,7 @@ module.exports = (sequelize, DataTypes) => {
             scopes: {
                 full: { attributes: {} }, // Include everything
                 summary: {
-                    attributes: ["id", "employee_id", "payroll_period_id", "net_salary", "status", "locked"]
+                    attributes: ["id", "employee_id", "payroll_period_id", "gross_salary", "total_deductions", "net_salary", "status", "locked", "snapshot"]
                 }
             },
             hooks: {

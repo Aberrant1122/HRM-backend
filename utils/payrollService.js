@@ -156,19 +156,25 @@ const _calculateCore = (employeePayroll, profile, attendances, leaves, adjustmen
         netSalary = grossSalary.minus(totalDeductions);
         formula = `Gross(${grossSalary}) = Base(${baseVal}) + OT(${overtimePay}) + Bonus(${totalBonuses}) + PosCorr(${totalCorrections.gt(0) ? totalCorrections : 0}); Deductions(${totalDeductions}) = Unpaid(${unpaidDeduction}) + Late(${latePenalty}) + Tax(${taxAmount}) + AdjPen(${totalAdjustmentPenalties}) + NegCorr(${totalCorrections.lt(0) ? totalCorrections.abs() : 0})`;
     } else if (profile.salary_type === "hourly") {
-        grossSalary = totalWorkedHours.times(baseVal).plus(totalBonuses).plus(totalCorrections.gt(0) ? totalCorrections : 0);
+        const basicEarnings = totalWorkedHours.times(baseVal);
         overtimePay = overtimeHours.times(otRate);
         latePenalty = lateCounts.times(new Decimal(lateRule.penalty_per_late || 0));
-        totalDeductions = latePenalty.plus(totalAdjustmentPenalties).plus(totalCorrections.lt(0) ? totalCorrections.abs() : 0);
-        netSalary = grossSalary.plus(overtimePay).minus(totalDeductions);
-        formula = `Hourly: Gross(${grossSalary}) = (Hours(${totalWorkedHours}) * Rate(${baseVal})) + OT(${overtimePay})`;
+        taxAmount = basicEarnings.times(taxPerc).dividedBy(100);
+
+        grossSalary = basicEarnings.plus(overtimePay).plus(totalBonuses).plus(totalCorrections.gt(0) ? totalCorrections : 0);
+        totalDeductions = latePenalty.plus(taxAmount).plus(totalAdjustmentPenalties).plus(totalCorrections.lt(0) ? totalCorrections.abs() : 0);
+        netSalary = grossSalary.minus(totalDeductions);
+        formula = `Hourly: Gross(${grossSalary}) = (Hours(${totalWorkedHours}) * Rate(${baseVal})) + OT(${overtimePay}) + Bonus(${totalBonuses})`;
     } else if (profile.salary_type === "daily") {
-        grossSalary = totalAttendanceDays.times(baseVal).plus(totalBonuses).plus(totalCorrections.gt(0) ? totalCorrections : 0);
+        const basicEarnings = totalAttendanceDays.times(baseVal);
         overtimePay = overtimeHours.times(otRate);
         latePenalty = lateCounts.times(new Decimal(lateRule.penalty_per_late || 0));
-        totalDeductions = latePenalty.plus(totalAdjustmentPenalties).plus(totalCorrections.lt(0) ? totalCorrections.abs() : 0);
-        netSalary = grossSalary.plus(overtimePay).minus(totalDeductions);
-        formula = `Daily: Gross(${grossSalary}) = (Days(${totalAttendanceDays}) * Rate(${baseVal})) + OT(${overtimePay})`;
+        taxAmount = basicEarnings.times(taxPerc).dividedBy(100);
+
+        grossSalary = basicEarnings.plus(overtimePay).plus(totalBonuses).plus(totalCorrections.gt(0) ? totalCorrections : 0);
+        totalDeductions = latePenalty.plus(taxAmount).plus(totalAdjustmentPenalties).plus(totalCorrections.lt(0) ? totalCorrections.abs() : 0);
+        netSalary = grossSalary.minus(totalDeductions);
+        formula = `Daily: Gross(${grossSalary}) = (Days(${totalAttendanceDays}) * Rate(${baseVal})) + OT(${overtimePay}) + Bonus(${totalBonuses})`;
     }
 
 

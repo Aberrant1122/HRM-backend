@@ -96,19 +96,26 @@ const createPayrollPeriod = async (req, res) => {
             });
         }
 
-        // 5. Ensure each employee has a payroll profile
+        // 5. Filter employees with payroll profiles
+        const employeesWithProfile = employees.filter((emp) => emp.payrollProfile);
         const employeesWithoutProfile = employees.filter((emp) => !emp.payrollProfile);
-        if (employeesWithoutProfile.length > 0) {
+
+        if (employeesWithProfile.length === 0) {
             await transaction.rollback();
-            const names = employeesWithoutProfile.map((emp) => emp.fullName).join(", ");
             return res.status(400).json({
                 success: false,
-                message: `The following employees are missing payroll profiles: ${names}. All active employees must have a profile before generating payroll.`,
+                message: "No employees with payroll profiles found. Please create payroll profiles before generating payroll.",
             });
         }
 
-        // 6. Create employee_payroll rows (Explicit fields to prevent mass assignment)
-        const employeePayrolls = employees.map((emp) => ({
+        // Log warning about skipped employees
+        if (employeesWithoutProfile.length > 0) {
+            const skippedNames = employeesWithoutProfile.map((emp) => emp.fullName).join(", ");
+            console.warn(`⚠️ Skipping employees without payroll profiles: ${skippedNames}`);
+        }
+
+        // 6. Create employee_payroll rows only for employees with profiles
+        const employeePayrolls = employeesWithProfile.map((emp) => ({
             payroll_period_id: payrollPeriod.id,
             employee_id: emp.id,
             gross_salary: 0,
@@ -126,14 +133,21 @@ const createPayrollPeriod = async (req, res) => {
 
         await transaction.commit();
 
-        return res.status(201).json({
+        const response = {
             success: true,
             message: "Payroll period generated successfully",
             data: {
                 payrollPeriod,
-                total_employees_processed: employees.length,
+                total_employees_processed: employeesWithProfile.length,
             },
-        });
+        };
+
+        // Add warning about skipped employees if any
+        if (employeesWithoutProfile.length > 0) {
+            response.warning = `${employeesWithoutProfile.length} employee(s) skipped due to missing payroll profiles: ${employeesWithoutProfile.map(e => e.fullName).join(", ")}`;
+        }
+
+        return res.status(201).json(response);
     } catch (error) {
         if (transaction) await transaction.rollback();
         console.error("Error generating payroll period:", error);
@@ -229,11 +243,24 @@ const addAdjustment = async (req, res) => {
             const adjAmount = parseFloat(amount);
 
             let newNet = currentNet;
-            if (type === 'bonus') newNet += adjAmount;
-            else if (type === 'penalty') newNet -= adjAmount;
-            else if (type === 'correction') newNet += adjAmount;
+            let newGross = parseFloat(payroll.gross_salary);
+            let newDeductions = parseFloat(payroll.total_deductions);
+
+            if (type === 'bonus') {
+                newNet += adjAmount;
+                newGross += adjAmount;
+            } else if (type === 'penalty') {
+                newNet -= adjAmount;
+                newDeductions += adjAmount;
+            } else if (type === 'correction') {
+                newNet += adjAmount;
+                if (adjAmount > 0) newGross += adjAmount;
+                else newDeductions += Math.abs(adjAmount);
+            }
 
             payroll.net_salary = newNet.toFixed(2);
+            payroll.gross_salary = newGross.toFixed(2);
+            payroll.total_deductions = newDeductions.toFixed(2);
             payroll.audit_log = addToAuditLog(payroll.audit_log, `Manual Adjustment (${type}): ${amount}. Reason: ${reason}`, req.user, payroll.status, payroll.status);
 
             // Note: Model hook beforeUpdate will allow this if only net_salary/audit_log changed and we correctly authorized it.
