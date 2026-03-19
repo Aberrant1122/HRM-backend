@@ -94,6 +94,11 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         defaultValue: null,
       },
+      expectedHours: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+        defaultValue: 8,
+      },
       attachments: {
         type: DataTypes.JSON,
         allowNull: true,

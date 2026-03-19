@@ -1071,6 +1071,7 @@ const updateUserProfile = async (req, res) => {
       department,
       position,
       reportingManager,
+      expectedHours,
     } = req.body;
 
     // Log the incoming data for debugging
@@ -1152,6 +1153,7 @@ const updateUserProfile = async (req, res) => {
         if (department !== undefined) createData.department = department;
         if (position !== undefined) createData.position = position;
         if (reportingManager !== undefined) createData.reportingManager = reportingManager;
+        if (expectedHours !== undefined) createData.expectedHours = expectedHours;
       }
 
       userInfo = await UserInfo.create(createData, { transaction });
@@ -1169,6 +1171,7 @@ const updateUserProfile = async (req, res) => {
         if (department !== undefined) updateData.department = department;
         if (position !== undefined) updateData.position = position;
         if (reportingManager !== undefined) updateData.reportingManager = reportingManager;
+        if (expectedHours !== undefined) updateData.expectedHours = expectedHours;
       }
 
       await userInfo.update(updateData, { transaction });
