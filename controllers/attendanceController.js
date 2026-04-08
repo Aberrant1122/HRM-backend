@@ -45,73 +45,37 @@ const formatHours = (hours) => {
 };
 
 const autoMarkAbsentsForOverdueClockIns = async () => {
-  const now = Date.now();
-  // Only run once per hour to avoid spamming the database with update queries
-  if (now - lastAutoMarkTime < 3600000) return;
-
-  lastAutoMarkTime = now;
-  const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  try {
-    await Attendance.update(
-      { status: "absent", totalHours: 0 },
-      {
-        where: {
-          clockOut: null,
-          clockIn: { [Op.lte]: threshold },
-          status: { [Op.ne]: "absent" },
-        },
-      }
-    );
-  } catch (error) {
-    console.error("Error in autoMarkAbsentsForOverdueClockIns:", error);
-  }
+  // This is now handled by a cron job in utils/cronJobs.js
+  // Keeping a stub for backward compatibility if needed, but not doing anything heavy here
+  return;
 };
 
 const getAllUsersTodaysAttendance = async (req, res) => {
   try {
-    await autoMarkAbsentsForOverdueClockIns();
     // Get date from query params or default to today
     const selectedDate = req.query.date || new Date().toISOString().split("T")[0];
 
-    console.log(`Fetching attendance for date: ${selectedDate}`);
-
-    // Get all users first
+    // Get all employees and their attendance in one query if possible, 
+    // but for now keeping the logic but removing the autoMark call
     const allUsers = await User.findAll({
-      where: { role: 'employee' }, // Assuming you want only employees
+      where: { role: 'employee' },
       attributes: ['id', 'fullName', 'email'],
       raw: true
     });
 
-    console.log(`Found ${allUsers.length} employees`);
-
-    // Get all attendance records for the selected date
     const attendanceRecords = await Attendance.findAll({
       where: {
         date: selectedDate,
       },
-      include: [
-        {
-          model: User,
-          attributes: ["id", "fullName", "email"],
-          as: "user",
-          required: false
-        },
-      ],
       attributes: ["id", "userId", "date", "clockIn", "clockOut", "status"],
       raw: true,
-      nest: true
     });
 
-    console.log(`Found ${attendanceRecords.length} attendance records for ${selectedDate}`);
-
-    // Create a map of userId to attendance record for quick lookup
     const attendanceMap = new Map();
     attendanceRecords.forEach(record => {
       attendanceMap.set(record.userId, record);
-      console.log(`Attendance record for user ${record.userId}: clockIn=${record.clockIn}, clockOut=${record.clockOut}, status=${record.status}`);
     });
 
-    // Merge all users with their attendance records
     const formattedRecords = allUsers.map(user => {
       const attendance = attendanceMap.get(user.id);
 
@@ -126,8 +90,6 @@ const getAllUsersTodaysAttendance = async (req, res) => {
         status: attendance?.status || "absent",
       };
     });
-
-    console.log(`Returning ${formattedRecords.length} formatted records`);
 
     return res.status(200).json({
       success: true,
@@ -146,19 +108,19 @@ const getAllUsersTodaysAttendance = async (req, res) => {
 
 // --- Clock In ---
 const clockIn = async (req, res) => {
+  const transaction = await Attendance.sequelize.transaction();
   try {
     const userId = req.user.id;
     const now = new Date();
     const today = formatDate(now);
 
-    console.log(`Clock-in attempt - User ID: ${userId}, Date: ${today}, Time: ${now.toISOString()}`);
-
     const existing = await Attendance.findOne({
       where: { userId, date: today },
+      transaction
     });
 
     if (existing) {
-      console.log(`User ${userId} already clocked in for ${today}`);
+      await transaction.rollback();
       return res.status(400).json({ message: "Already clocked in for today" });
     }
 
@@ -167,9 +129,9 @@ const clockIn = async (req, res) => {
       date: today,
       clockIn: now,
       status: "present",
-    });
+    }, { transaction });
 
-    console.log(`Clock-in successful - Attendance ID: ${attendance.id}, User: ${userId}, Date: ${today}`);
+    await transaction.commit();
 
     return res.status(200).json({
       message: "Clock-in successful",
@@ -181,6 +143,7 @@ const clockIn = async (req, res) => {
       },
     });
   } catch (error) {
+    if (transaction) await transaction.rollback();
     console.error(`Clock-in error for user ${req.user?.id}:`, error);
     return res
       .status(500)
@@ -190,91 +153,57 @@ const clockIn = async (req, res) => {
 
 // --- Clock Out ---
 const clockOut = async (req, res) => {
+  const transaction = await Attendance.sequelize.transaction();
   try {
-    await autoMarkAbsentsForOverdueClockIns();
     const userId = req.user.id;
     const now = new Date();
     const today = formatDate(now);
 
-    // Extract checkout form data
     const { taskId, taskStatus, workNote, deliverableLink } = req.body;
-    const numericTaskId = (() => {
-      if (taskId === undefined || taskId === null) return null;
-      const n = Number(taskId);
-      return Number.isInteger(n) && n > 0 ? n : null;
-    })();
+    const numericTaskId = taskId ? Number(taskId) : null;
 
-    // Validate task status
+    // Validate request data
     const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
     if (taskStatus && !validStatuses.includes(taskStatus)) {
-      return res.status(400).json({
-        message: `Invalid task status. Must be one of: ${validStatuses.join(", ")}`,
-      });
-    }
-
-    // Validate work note length
-    if (workNote && workNote.length > 120) {
-      return res.status(400).json({
-        message: "Work note must be 120 characters or less",
-      });
-    }
-
-    // Validate deliverable link is a URL if provided
-    if (deliverableLink) {
-      try {
-        new URL(deliverableLink);
-      } catch (e) {
-        return res.status(400).json({
-          message: "Deliverable link must be a valid URL",
-        });
-      }
+      await transaction.rollback();
+      return res.status(400).json({ message: "Invalid task status" });
     }
 
     let attendance = await Attendance.findOne({
-      where: {
-        userId,
-        date: today,
-        clockOut: null,
-      },
+      where: { userId, date: today, clockOut: null },
+      transaction
     });
 
     if (!attendance) {
-      // Auto-create attendance to allow checkout without prior clock-in
       attendance = await Attendance.create({
         userId,
         date: today,
         clockIn: now,
         status: "present",
-      });
+      }, { transaction });
     }
 
-    // Verify task exists and is assigned to the user if provided
+    // Verify task if provided
     if (numericTaskId) {
       const task = await Task.findOne({
-        where: {
-          id: numericTaskId,
-          assigneeId: userId,
-          isActive: true,
-        },
+        where: { id: numericTaskId, assigneeId: userId, isActive: true },
+        transaction
       });
       if (!task) {
-        return res.status(404).json({
-          message: "Task not found or not assigned to you",
-        });
+        await transaction.rollback();
+        return res.status(404).json({ message: "Task not found or not assigned to you" });
       }
     }
 
-    // Calculate hours worked
     const clockInTime = new Date(attendance.clockIn);
     const hoursWorked = (now - clockInTime) / (1000 * 60 * 60);
 
-    // Update attendance
     await attendance.update({
       clockOut: now,
       totalHours: hoursWorked,
-    });
+    }, { transaction });
 
-    // Process uploaded deliverable files
+    // Process deliverables
     const deliverables = [];
     if (req.files && req.files.length > 0) {
       req.files.forEach((file) => {
@@ -289,11 +218,6 @@ const clockOut = async (req, res) => {
       });
     }
 
-    // Always create daily work record when checking out
-    // This ensures every checkout has a corresponding work record for reporting
-    console.log(`Creating daily work record for user ${userId}, attendance ${attendance.id}, date ${today}`);
-    console.log(`Task details: taskId=${numericTaskId}, taskStatus=${taskStatus}, workNote=${workNote}`);
-
     const recordData = {
       userId,
       attendanceId: attendance.id,
@@ -304,33 +228,19 @@ const clockOut = async (req, res) => {
       deliverables: deliverables.length > 0 ? deliverables : null,
       date: today,
     };
-    let dailyWorkRecord;
-    try {
-      dailyWorkRecord = await DailyWorkRecord.findOne({
-        where: { userId, attendanceId: attendance.id },
-      });
-      if (dailyWorkRecord) {
-        await dailyWorkRecord.update(recordData);
-      } else {
-        dailyWorkRecord = await DailyWorkRecord.create(recordData);
-      }
-    } catch (e) {
-      const name = e?.name || "";
-      const message = e?.message || "Failed to record daily work";
-      if (name.includes("ValidationError")) {
-        return res.status(400).json({ message });
-      }
-      if (name.includes("UniqueConstraintError")) {
-        return res.status(409).json({ message });
-      }
-      throw e;
+
+    let dailyWorkRecord = await DailyWorkRecord.findOne({
+      where: { userId, attendanceId: attendance.id },
+      transaction
+    });
+
+    if (dailyWorkRecord) {
+      await dailyWorkRecord.update(recordData, { transaction });
+    } else {
+      dailyWorkRecord = await DailyWorkRecord.create(recordData, { transaction });
     }
 
-    console.log(`Daily work record created successfully with ID: ${dailyWorkRecord.id}`);
-
-    // Update task status if different from current status
-    // Note: The checkout taskStatus is for reporting, not necessarily the task's actual status
-    // We'll keep them separate as per requirements
+    await transaction.commit();
 
     return res.status(200).json({
       message: "Clock-out successful",
@@ -342,20 +252,12 @@ const clockOut = async (req, res) => {
         totalHours: formatHours(hoursWorked),
         status: attendance.status,
       },
-      dailyWorkRecord: {
-        id: dailyWorkRecord.id,
-        taskId: dailyWorkRecord.taskId,
-        taskStatus: dailyWorkRecord.taskStatus,
-        workNote: dailyWorkRecord.workNote,
-        deliverableLink: dailyWorkRecord.deliverableLink,
-        deliverables: dailyWorkRecord.deliverables || [],
-      },
+      dailyWorkRecord
     });
   } catch (error) {
+    if (transaction) await transaction.rollback();
     console.error("Clock-out error:", error);
-    return res
-      .status(500)
-      .json({ message: "Internal server error", error: error.message });
+    return res.status(500).json({ message: "Internal server error", error: error.message });
   }
 };
 

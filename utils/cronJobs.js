@@ -18,6 +18,30 @@ class CronJobs {
       }
     });
 
+    // Auto mark absents for overdue clock-ins every hour
+    cron.schedule('0 * * * *', async () => {
+      console.log('Running auto-mark absents job...');
+      try {
+        const { Attendance } = require('../models');
+        const { Op } = require('sequelize');
+        const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        
+        const [updatedCount] = await Attendance.update(
+          { status: "absent", totalHours: 0 },
+          {
+            where: {
+              clockOut: null,
+              clockIn: { [Op.lte]: threshold },
+              status: { [Op.ne]: "absent" },
+            },
+          }
+        );
+        console.log(`Auto-marked ${updatedCount} overdue clock-ins as absent`);
+      } catch (error) {
+        console.error('Error in auto-mark absents cron job:', error);
+      }
+    });
+
     console.log('✅ Cron jobs initialized');
   }
 

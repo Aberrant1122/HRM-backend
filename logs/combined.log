@@ -65152,3 +65152,55 @@
 {"level":"info","message":"GET /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-03-19T19:23:38.200Z"}
 {"level":"info","message":"OPTIONS /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-03-19T19:24:08.505Z"}
 {"level":"info","message":"GET /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-03-19T19:24:08.510Z"}
+{"level":"info","message":"✅ Connected to MySQL database: hrm","service":"hrm-backend","timestamp":"2026-04-08T20:11:50.975Z"}
+{"level":"info","message":"✅ Server running on port 5001","service":"hrm-backend","timestamp":"2026-04-08T20:11:51.002Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:34.875Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:34.883Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:41.231Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:41.236Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:52.119Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:52.122Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:55.063Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:55.067Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:56.646Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:56.650Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:59.279Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:12:59.282Z"}
+{"level":"info","message":"✅ Connected to MySQL database: hrm","service":"hrm-backend","timestamp":"2026-04-08T20:13:15.848Z"}
+{"level":"info","message":"✅ Server running on port 5001","service":"hrm-backend","timestamp":"2026-04-08T20:13:15.867Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:15.928Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:15.937Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:17.490Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:17.494Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:24.346Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:24.350Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:25.091Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:25.095Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:25.265Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:25.269Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:25.411Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:25.414Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:30.642Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:30.645Z"}
+{"level":"info","message":"✅ Connected to MySQL database: hrm","service":"hrm-backend","timestamp":"2026-04-08T20:13:36.538Z"}
+{"level":"info","message":"✅ Server running on port 5001","service":"hrm-backend","timestamp":"2026-04-08T20:13:36.555Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:47.552Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:13:47.566Z"}
+{"level":"info","message":"OPTIONS /api/dashboard/summary","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.156Z"}
+{"level":"info","message":"GET /api/dashboard/summary","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.160Z"}
+{"level":"info","message":"OPTIONS /api//auth/check-project-manager","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.183Z"}
+{"level":"info","message":"OPTIONS /api/employee/15/user-info","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.193Z"}
+{"level":"info","message":"OPTIONS /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.200Z"}
+{"level":"info","message":"OPTIONS /api//auth/check-project-manager","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.207Z"}
+{"level":"info","message":"OPTIONS /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.209Z"}
+{"level":"info","message":"GET /api//auth/check-project-manager","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.211Z"}
+{"level":"info","message":"GET /api/employee/15/user-info","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.217Z"}
+{"level":"info","message":"GET /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.236Z"}
+{"level":"info","message":"GET /api//auth/check-project-manager","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.243Z"}
+{"level":"info","message":"GET /api/notifications/unread-count","service":"hrm-backend","timestamp":"2026-04-08T20:13:51.252Z"}
+{"level":"info","message":"✅ Connected to MySQL database: hrm","service":"hrm-backend","timestamp":"2026-04-08T20:14:03.400Z"}
+{"level":"info","message":"✅ Server running on port 5001","service":"hrm-backend","timestamp":"2026-04-08T20:14:03.419Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:14:04.629Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:14:04.635Z"}
+{"level":"info","message":"OPTIONS /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:14:13.336Z"}
+{"level":"info","message":"POST /api/auth/login","service":"hrm-backend","timestamp":"2026-04-08T20:14:13.340Z"}
