@@ -96,19 +96,7 @@ app.use((err, req, res, next) => {
 app.set('io', io);
 
 // Socket.IO connection handling
-io.on('connection', (socket) => {
-  // logger.info(`User connected: ${socket.id}`);
-
-  // Join user room for notifications
-  socket.on('join', (userId) => {
-    socket.join(`user_${userId}`);
-    // logger.info(`User ${userId} joined room user_${userId}`);
-  });
-
-  socket.on('disconnect', () => {
-    // logger.info(`User disconnected: ${socket.id}`);
-  });
-});
+require('./utils/realtimeAccess').configureRealtimeAccess(io);
 
 // Test Database Connection
 

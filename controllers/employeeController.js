@@ -8,7 +8,7 @@ const { getPagination, getPagingData } = require("../utils/pagination");
 const getAllEmployeesWithUserInfo = async (req, res) => {
   try {
     const { page, limit, includeUserInfo: includeUserInfoQuery, department } = req.query;
-    const includeUserInfo = includeUserInfoQuery !== "false" || !!department;
+    const includeUserInfo = (includeUserInfoQuery !== false && includeUserInfoQuery !== "false") || !!department;
     const { limit: l, offset } = getPagination(page, limit);
 
     const queryOptions = {

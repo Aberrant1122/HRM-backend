@@ -73,6 +73,31 @@ test('synthetic browser employee creation/deactivation and real HTTP/storage aut
     for(const role of ['employee','manager'])assert.equal((await api.patch(`${base}/employee/${fixture.ids.manager}/role`,{headers,data:{role}})).status(),200);
     assert.equal((await api.get(`${base}/employee/${fixture.ids.manager}/get-bank-details`,{headers:{Authorization:`Bearer ${managerToken}`}})).status(),401);
     assert.ok(await login('manager@example.invalid'));
+    // Exercise the real frontend SocketProvider with the configured API URL.
+    const clientContext=await browser.newContext();
+    await clientContext.route('**/*',route=>{
+      const url=new URL(route.request().url());
+      return url.hostname==='127.0.0.1'&&['13380','13381','13382'].includes(url.port)?route.continue():route.abort();
+    });
+    const clientPage=await clientContext.newPage();let notificationFrames=0;
+    let receiveNotification;const notification=new Promise(resolve=>{receiveNotification=resolve;});
+    clientPage.on('websocket',socket=>socket.on('framereceived',frame=>{
+      if(String(frame.payload).includes('synthetic-test-message')){notificationFrames++;receiveNotification();}
+    }));
+    await clientPage.goto('http://127.0.0.1:13380/login');
+    await clientPage.locator('#email').fill('client@example.invalid');await clientPage.locator('#password').fill('Synthetic-local-123');
+    await clientPage.getByRole('button',{name:/sign in/i}).click();await clientPage.waitForURL('**/client/dashboard');
+    for(let attempt=0;;attempt++){
+      const state=await(await api.get('http://127.0.0.1:13381/__fixture')).json();
+      if(state.socketUsers.includes(fixture.ids.client))break;
+      assert.ok(attempt<79,'Authenticated client socket did not connect');await new Promise(resolve=>setTimeout(resolve,250));
+    }
+    const firstPush=await api.post('http://127.0.0.1:13381/__fixture/notify',{headers,data:{userId:fixture.ids.client}});
+    assert.equal((await firstPush.json()).delivered,1);await notification;
+    assert.equal((await api.delete(`${base}/employee/${fixture.ids.client}`,{headers})).status(),200);
+    const revokedPush=await api.post('http://127.0.0.1:13381/__fixture/notify',{headers,data:{userId:fixture.ids.client}});
+    assert.equal((await revokedPush.json()).delivered,0);assert.equal(notificationFrames,1);
+    await clientContext.close();
     console.log('Verified browser add/deactivate, private profile fields, cross-user multipart denial with zero sink writes, own document lifecycle, manager role-cycle revocation.');
   }finally{await browser.close();}
 });

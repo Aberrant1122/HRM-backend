@@ -193,6 +193,43 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
       assert.deepEqual([ra.code,rb.code].sort(),[200,409]);
       assert.equal(Number(await LeaveRequest.sum('totalDays',{where:{userId:employee.id,status:'approved'}})),3);
     });
+    await t.test('bank HTTP routes preserve self/admin writes and deny cross-account reads and mutations',async()=>{
+      const express=require('express'),jwt=require('jsonwebtoken'),secret='synthetic-bank-session';
+      const UserBankInfo=require('../models/userBankInfo')(db,DataTypes);
+      const access=require('../middleware/employeeAccess');
+      const auth=load('middleware/authMiddleware.js',{'../models':{User},'../config/jwtSecret':secret,jsonwebtoken:jwt});
+      const controllers=load('controllers/employeeController.js',{
+        '../models':{User,UserBankInfo},'../middleware/employeeAccess':access,sequelize:Sequelize,
+        'express-validator':require('express-validator'),path,'../utils/pagination':require('../utils/pagination'),
+      });
+      const upload={array:()=>((req,res,next)=>next()),single:()=>((req,res,next)=>next())};
+      const router=load('routes/employeeRoutes.js',{
+        express,'express-validator':require('express-validator'),'../controllers/employeeController':controllers,
+        '../middleware/authMiddleware':auth,'../middleware/employeeAccess':access,
+        '../middleware/validationMiddleware':require('../middleware/validationMiddleware'),
+        '../validations/bankInfoValidation':require('../validations/bankInfoValidation'),
+        '../middleware/upload':{uploadEmployeeAttachments:upload,uploadProfilePicture:upload},'../validations/profileValidation':[],
+      });
+      const owner=await User.create({fullName:'Bank Owner',email:'bank-owner@example.invalid',role:'employee',status:'active'});
+      const other=await User.create({fullName:'Bank Other',email:'bank-other@example.invalid',role:'manager',status:'active'});
+      const adminAccount=await User.create({fullName:'Bank Admin',email:'bank-admin@example.invalid',role:'admin',status:'active'});
+      const headers=user=>({'Content-Type':'application/json',Authorization:'Bearer '+jwt.sign({id:user.id,role:user.role,sessionVersion:0},secret)});
+      const app=express();app.use(express.json());app.use('/api/employee',auth.authenticate,router);
+      const server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});
+      const base=`http://127.0.0.1:${server.address().port}/api/employee/${owner.id}`;
+      const payload={bankName:'Synthetic Bank',accountTitle:'Synthetic Owner',accountNumber:'0000000000',IBAN:'PK00TEST0000000000000000'};
+      try{
+        assert.equal((await fetch(base+'/add-bank-details',{method:'POST',headers:headers(owner),body:JSON.stringify(payload)})).status,200);
+        assert.equal((await fetch(base+'/update-bank-details',{method:'PUT',headers:headers(owner),body:JSON.stringify({bankName:'Synthetic Updated'})})).status,200);
+        for(const [method,endpoint,body] of [['GET','get-bank-details'],['POST','add-bank-details',payload],['PUT','update-bank-details',{bankName:'Denied'}]]){
+          assert.equal((await fetch(base+'/'+endpoint,{method,headers:headers(other),...(body?{body:JSON.stringify(body)}:{})})).status,403);
+        }
+        assert.equal((await fetch(base+'/update-bank-details',{method:'PUT',headers:headers(adminAccount),body:JSON.stringify({bankName:'Admin Updated'})})).status,200);
+        const result=await(await fetch(base+'/get-bank-details',{headers:headers(owner)})).json();
+        assert.equal(result.data.bankName,'Admin Updated');assert.equal(result.data.IBAN,payload.IBAN);assert.equal(result.data.accountNumber,payload.accountNumber);
+        assert.equal(await UserBankInfo.count({where:{userId:owner.id}}),1);
+      }finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+    });
     await t.test('payroll finalization competes safely with deletion and retains prior audit entries',async()=>{
       const PayrollPeriod=require('../models/payrollPeriod')(db,DataTypes);
       const EmployeePayroll=require('../models/employeePayroll')(db,DataTypes);

@@ -32,7 +32,7 @@ const opts={dialect:'mysql',host:'127.0.0.1',port:13379,logging:false};
   // Route modules use real models against the explicit disposable connection.
   require.cache[require.resolve('../models')]={id:require.resolve('../models'),filename:require.resolve('../models'),loaded:true,exports:models};
   const ids={};
-  for(const [role,name] of [['admin','Admin'],['employee','Employee'],['manager','Manager']]){
+  for(const [role,name] of [['admin','Admin'],['employee','Employee'],['manager','Manager'],['client','Client']]){
     const user=await models.User.create({fullName:'Synthetic '+name,email:role+'@example.invalid',password:'Synthetic-local-123',role,status:'active'});
     await models.UserInfo.create({userId:user.id,department:'development',position:'Synthetic',cnic:`00000-000000${user.id}-0`,salary:1234,contactNumber:'0000000000'});
     ids[role]=user.id;
@@ -51,11 +51,19 @@ const opts={dialect:'mysql',host:'127.0.0.1',port:13379,logging:false};
   });
   await new Promise(resolve=>storage.listen(13382,'127.0.0.1',resolve));
   const app=express();app.use(require('cors')({origin:'http://127.0.0.1:13380'}));app.use(express.json());
-  app.get('/__fixture',(_,res)=>res.json({schema,ids,storageWrites,objects:objects.size}));
+  app.get('/__fixture',(_,res)=>res.json({schema,ids,storageWrites,objects:objects.size,socketUsers:[...io.sockets.sockets.values()].map(socket=>socket.data.userId)}));
   app.post('/__shutdown',(_,res)=>{res.on('finish',()=>setImmediate(close));res.sendStatus(200);});
+  const {authenticate,isAdmin}=require('../middleware/authMiddleware');
+  app.post('/__fixture/notify',authenticate,isAdmin,async(req,res)=>{
+    const delivered=await require('../utils/realtimeAccess').emitToUser(io,req.body.userId,'notification',{message:'synthetic-test-message'});
+    res.json({delivered});
+  });
   app.use('/api',require('../routes'));
   app.use((err,req,res,next)=>{console.error('Synthetic request failed:',err.message);res.status(500).json({message:err.message});});
-  const server=app.listen(13381,'127.0.0.1',()=>console.log('SYNTHETIC_ACCEPTANCE_READY'));
-  async function close(){server.closeAllConnections();server.close();storage.closeAllConnections();storage.close();await sequelize.close();process.exit(0);}
+  const server=http.createServer(app);
+  const io=require('socket.io')(server,{cors:{origin:'http://127.0.0.1:13380'}});
+  require('../utils/realtimeAccess').configureRealtimeAccess(io);app.set('io',io);
+  server.listen(13381,'127.0.0.1',()=>console.log('SYNTHETIC_ACCEPTANCE_READY'));
+  async function close(){io.close();server.closeAllConnections();server.close();storage.closeAllConnections();storage.close();await sequelize.close();process.exit(0);}
   process.on('SIGINT',close);process.on('SIGTERM',close);
 })().catch(error=>{console.error(error);process.exit(1);});

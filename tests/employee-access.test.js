@@ -68,3 +68,18 @@ test('cross-employee profile query excludes confidential fields; self/admin reta
     }
   }
 });
+
+test('includeUserInfo=false survives boolean coercion while department filtering retains the join',async()=>{
+  let query;
+  const controller=load('controllers/employeeController.js',{
+    '../middleware/employeeAccess':access,
+    '../models':{User:{findAndCountAll:async options=>{query=options;return {count:0,rows:[]};}},UserInfo:{},UserBankInfo:{}},
+    sequelize:{Op:{}},'express-validator':{},path:{},'../utils/pagination':require('../utils/pagination'),'../utils/s3Helper':{},
+  });
+  for(const value of [false,'false']){
+    const res=response();await controller.getAllEmployeesWithUserInfo({query:{includeUserInfo:value},user:{id:1,role:'employee'}},res);
+    assert.equal(res.code,200);assert.equal(query.include.length,0);assert.equal(res.body.meta.includeUserInfo,false);
+  }
+  const res=response();await controller.getAllEmployeesWithUserInfo({query:{includeUserInfo:false,department:'development'},user:{id:1,role:'employee'}},res);
+  assert.equal(query.include.length,1);assert.equal(query.include[0].where.department,'development');
+});
