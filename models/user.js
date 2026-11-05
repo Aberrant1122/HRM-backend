@@ -166,9 +166,7 @@ module.exports = (sequelize, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
-          if (user.changed("role") || user.changed("status") || user.changed("password")) {
-            user.sessionVersion = Number(user.sessionVersion || 0) + 1;
-          }
+          // Database trigger revokes sessions atomically for every mutation path.
           if (user.changed("password")) {
             user.password = await bcrypt.hash(user.password, 12);
             user.passwordChangedAt = new Date();

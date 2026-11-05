@@ -14,7 +14,9 @@
     "seed:undo": "npx sequelize-cli db:seed:undo:all --config=./config/config.js",
     "test": "node --test tests/employee-access.test.js tests/integrity.test.js && node tests/payroll.test.js",
     "test:access": "node --test tests/employee-access.test.js",
-    "test:integrity": "node --test tests/employee-access.test.js tests/integrity.test.js"
+    "test:integrity": "node --test tests/employee-access.test.js tests/integrity.test.js",
+    "test:frontend-contract": "node --test tests/frontend-invite.test.js",
+    "test:mysql9": "node --test tests/mysql9.integration.js"
   },
   "repository": {
     "type": "git",

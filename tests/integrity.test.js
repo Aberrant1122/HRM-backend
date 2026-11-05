@@ -13,7 +13,7 @@ test('caller-selected registration roles require authentication and admin before
   assert.deepEqual(route.handlers,[authenticated,admin,validate,create]);
 });
 
-test('account model revokes sessions for role/status/password changes, not profile edits', async () => {
+test('account model hashes password changes without assigning a stale session counter', async () => {
   const { Sequelize, DataTypes } = require('sequelize');
   const sequelize = new Sequelize('synthetic', 'synthetic', 'synthetic', {dialect:'mysql',logging:false});
   const User = require('../models/user')(sequelize,DataTypes);
@@ -22,7 +22,8 @@ test('account model revokes sessions for role/status/password changes, not profi
     for (const initialField of user.changed() || []) user.changed(initialField, false);
     user.set(field, {role:'manager',status:'inactive',password:'synthetic-password',fullName:'Renamed'}[field]);
     await User.runHooks('beforeUpdate',user,{});
-    assert.equal(user.sessionVersion,field === 'fullName' ? 4 : 5);
+    assert.equal(user.sessionVersion,4);
+    if (field === 'password') assert.equal(await user.comparePassword('synthetic-password'), true);
   }
   await sequelize.close();
 });
@@ -112,3 +113,29 @@ test('competing approvals recheck remaining quota after acquiring employee lock'
   await Promise.all([controller.approveLeave({params:{id:1},user:{id:9}},a),controller.approveLeave({params:{id:2},user:{id:9}},b)]);
   assert.equal(a.code,200);assert.equal(b.code,409);assert.equal(used,3);assert.equal(requests[2].status,'pending');
 });
+
+for (const first of ['approveLeave', 'rejectLeave']) {
+  test(`${first} wins once when approval and rejection compete`, async () => {
+    let queue=Promise.resolve(), writes=0, committed=0;
+    const tx={LOCK:{UPDATE:'UPDATE'}}, locks=[];
+    const request={userId:3,leaveTypeId:1,status:'pending',totalDays:1,
+      async update(values,opts){assert.equal(opts.transaction,tx);writes++;Object.assign(this,values);},
+    };
+    const controller=load('controllers/leaveController.js',{
+      '../models':{
+        User:{findByPk:async(id,opts)=>{locks.push('user');assert.equal(opts.lock,'UPDATE');return {id};}},
+        LeaveRequest:{findByPk:async(id,opts)=>{if(opts){locks.push('request');assert.equal(opts.lock,'UPDATE');}return request;},
+          sequelize:{transaction:fn=>{const job=queue.then(async()=>{const result=await fn(tx);committed++;return result;});queue=job.catch(()=>{});return job;}},
+        },
+        LeaveType:{findByPk:async()=>({status:'active',annual_quota:0})},
+      },sequelize:{Op:{}},'../utils/pagination':{},
+    });
+    const second=first==='approveLeave'?'rejectLeave':'approveLeave';
+    const a=response(),b=response();
+    const req={params:{id:1},user:{id:9},body:{rejectionReason:'Synthetic rejection'}};
+    await Promise.all([controller[first](req,a),controller[second](req,b)]);
+    assert.equal(a.code,200);assert.equal(b.code,400);assert.equal(writes,1);assert.equal(committed,2);
+    assert.equal(request.status,first==='approveLeave'?'approved':'rejected');
+    assert.deepEqual(locks,['user','request','user','request']);
+  });
+}

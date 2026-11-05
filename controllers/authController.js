@@ -181,7 +181,7 @@ const inviteEmployee = async (req, res) => {
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;" />
               <p style="font-size: 0.9em;">Once your password is set, you can access your dashboard anytime at:</p>
               <p style="background-color: #f3f4f6; padding: 10px; border-radius: 4px; text-align: center;">
-                <a href="https://human-resource-management-production-b7d0.up.railway.app/" style="color: #2563eb; text-decoration: none; font-weight: 500;">Go to Portal</a>
+                <a href="${baseUrl}/" style="color: #2563eb; text-decoration: none; font-weight: 500;">Go to Portal</a>
               </p>
             </div>
             <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 0.8em; color: #9ca3af;">
