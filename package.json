@@ -12,7 +12,9 @@
     "migrate:undo": "npx sequelize-cli db:migrate:undo:all --config=./config/config.js",
     "seed": "npx sequelize-cli db:seed:all --config=./config/config.js",
     "seed:undo": "npx sequelize-cli db:seed:undo:all --config=./config/config.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test tests/employee-access.test.js tests/integrity.test.js && node tests/payroll.test.js",
+    "test:access": "node --test tests/employee-access.test.js",
+    "test:integrity": "node --test tests/employee-access.test.js tests/integrity.test.js"
   },
   "repository": {
     "type": "git",

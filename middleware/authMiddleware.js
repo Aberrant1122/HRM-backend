@@ -1,10 +1,11 @@
 const jwt = require("jsonwebtoken");
 
 // Secret key for JWT signing (store it securely in environment variables)
-const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "your_secret_key";
+const JWT_SECRET_KEY = require("../config/jwtSecret");
+const { User } = require("../models");
 
 // Middleware to authenticate the JWT token
-const authenticate = (req, res, next) => {
+const authenticate = async (req, res, next) => {
   // Try to get token from Authorization header first
   const authHeader = req.headers["authorization"];
   let token = authHeader && authHeader.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
@@ -24,7 +25,14 @@ const authenticate = (req, res, next) => {
   try {
     // Verify the token
     const decoded = jwt.verify(token, JWT_SECRET_KEY);
-    req.user = decoded;
+    const account = await User.findByPk(decoded.id, {
+      attributes: ["id", "role", "email", "status", "sessionVersion"],
+    });
+    if (!account || account.status !== "active" || account.role !== decoded.role ||
+        Number(account.sessionVersion) !== Number(decoded.sessionVersion ?? 0)) {
+      return res.status(401).json({ success: false, message: "Session revoked. Please sign in again." });
+    }
+    req.user = { ...decoded, id: account.id, role: account.role, email: account.email };
     next();
   } catch (error) {
     console.error(`[Auth Error] ${error.message}`);

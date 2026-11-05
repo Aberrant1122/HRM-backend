@@ -307,23 +307,35 @@ const approveLeave = async (req, res) => {
             return res.status(404).json({ success: false, message: "Leave request not found" });
         }
 
-        if (leaveRequest.status !== "pending") {
-            return res.status(400).json({
-                success: false,
-                message: `Leave request is already ${leaveRequest.status}`,
-            });
-        }
-
-        await leaveRequest.update({
-            status: "approved",
-            approvedBy: req.user.id,
+        const result = await LeaveRequest.sequelize.transaction(async (transaction) => {
+            // Serialize approvals for this employee, including different pending requests.
+            await User.findByPk(leaveRequest.userId, { transaction, lock: transaction.LOCK.UPDATE });
+            const current = await LeaveRequest.findByPk(id, { transaction, lock: transaction.LOCK.UPDATE });
+            if (!current) return { status: 404, body: { success: false, message: "Leave request not found" } };
+            if (current.status !== "pending") {
+                return { status: 400, body: { success: false, message: "Leave request is already " + current.status } };
+            }
+            const leaveType = await LeaveType.findByPk(current.leaveTypeId, { transaction, lock: transaction.LOCK.UPDATE });
+            if (!leaveType || leaveType.status !== "active") {
+                return { status: 400, body: { success: false, message: "Invalid or inactive leave type" } };
+            }
+            // Reapply the existing submission quota rule. Leave-year policy remains a product decision.
+            if (leaveType.annual_quota > 0) {
+                const currentYear = new Date().getFullYear();
+                const used = Number(await LeaveRequest.sum("totalDays", {
+                    where: {
+                        userId: current.userId, leaveTypeId: current.leaveTypeId, status: "approved",
+                        startDate: { [Op.gte]: currentYear + "-01-01", [Op.lte]: currentYear + "-12-31" },
+                    }, transaction,
+                }) || 0);
+                if (used + Number(current.totalDays) > Number(leaveType.annual_quota)) {
+                    return { status: 409, body: { success: false, message: "Insufficient leave balance at approval" } };
+                }
+            }
+            await current.update({ status: "approved", approvedBy: req.user.id }, { transaction });
+            return { status: 200, body: { success: true, message: "Leave request approved successfully", data: current } };
         });
-
-        return res.status(200).json({
-            success: true,
-            message: "Leave request approved successfully",
-            data: leaveRequest,
-        });
+        return res.status(result.status).json(result.body);
     } catch (error) {
         console.error("Error approving leave:", error);
         return res.status(500).json({

@@ -1,0 +1,37 @@
+HRM DEVELOPMENT LEDGER — 5 November 2026 (America/Los_Angeles)
+
+Scope: phase 1 release-readiness assessment and phase 2 access/integrity remediation.
+Backend baseline 34f57fbdb34700bf0dadf065db3999cd191db78f.
+Frontend baseline 6b070117a05d55f758718f29bf9296daa7ea452c.
+Coordination documents were read and left unchanged. Original DOC IDs use the existing requirements register.
+
+Requirement / implementation / verification
+DOC-022,023,103: bank read/create/update and attachment writes require self/admin; upload authorization runs before attachment and profile-picture storage middleware. Cross-user detail queries select directory fields; employee lists expose CNIC only to existing admins. Removed complete profile request-body logging. Route/controller regression checks pass; no storage service or authenticated UI exercised.
+DOC-027,114,115: deactivation retains users, project/task and payroll history; removes destructive employee-delete branch. Frontend copy and local list status reflect deactivation. Regression checks confirm no destroy call.
+DOC-027,114: JWT validation reloads active account, role and sessionVersion; shared auth middleware covers protected auth routes. Model hook increments version on role/status/password changes. New migration adds non-null default-zero sessionVersion. Legacy tokens accepted only for version-zero active accounts with matching role. Config accepts JWT_SECRET_KEY or JWT_SECRET and rejects missing/default secret. Signed-token and real Sequelize-hook tests pass. Migration up/down interface tested, not executed against MySQL.
+DOC-059–069: approval locks employee then request/type, rechecks existing annual quota in a transaction and responds after commit. Simulated competing approvals admit one request when the second exceeds allowance. This deliberately retains the existing CURRENT CALENDAR YEAR rule and quota=0 behavior. Future/cross-year requests, holidays/workdays, reservations and override policy remain unresolved; this is NOT complete leave-policy remediation. Actual MySQL concurrency verification pending.
+DOC-071–083: finalized/locked payroll children or approved/paid period prevent period deletion with 409; shares period lock with transitions. Non-finalized deletion remains. Regression checks pass. No payroll formula changes.
+Access prerequisite: public /auth/register previously accepted caller-selected admin roles. It now requires current authenticated admin before validation/creation. Route regression check passes. Existing administrator provisioning remains available; public self-registration is blocked.
+
+Verification evidence
+- npm ci --ignore-scripts completed for backend; local Node v22.23.4 differs from declared >=18 <21 runtime.
+- npm run test:integrity: 16/16 pass. Database/storage/route dependencies are isolated where necessary; not HTTP acceptance or live database proof.
+- npm test additionally runs existing payroll suite and remains RED: hourly salary assertion. Reproduced on independent untouched baseline worktree. Expected 11000 ignores the fixture's 5% tax, while implementation deducts tax; no policy chosen or calculation changed.
+- Backend build script only echoes success; not compilation/integration evidence. Changed JavaScript syntax and whitespace checked.
+- Frontend dependency download initially failed with ECONNRESET; retry status recorded in review. Frontend verification must be checked separately.
+- CI: no workflow found in source snapshots. Railway backend source.checkSuites=false.
+
+Read-only deployment evidence
+Railway project Hr-CRM d3d9642a-87b1-4fcb-b2ac-6b619ea0ca1d has ONLY production 87199464-2ada-411a-a6f3-592b9b488134. Both apps use main; both latest deployments report SUCCESS. MySQL image mysql:9 uses persistent volume 0ea29fad-d43e-4f0c-9054-aa202e66af6e at /var/lib/mysql. Persistence does not prove backups. No backup schedule, retention, successful backup or restore evidence available through inspected tools. No staging provisioned or production settings changed.
+Backend variable-name inventory includes JWT_SECRET, not JWT_SECRET_KEY. Values were not requested. Config alias fixes mismatch; release must plan session invalidation/sign-in and verify secret provisioning without exposing values.
+
+Release gates / exact decisions
+1. Product coordination: HR/Accounts capability/target scope, own-bank edit approval, salary/payslip self-access; preserve current self/admin boundaries until agreed.
+2. Product coordination: leave year/time zone, cross-year charging, chargeable days, pending reservations and authorized overrides; no invented rules in this patch.
+3. Product coordination: resolve hourly payroll expected tax result vs existing failing assertion.
+4. Release owner: isolated staging database/storage/mail; synthetic admin/employee/manager/client identities; MySQL concurrent approval and payroll-transition/delete checks; migration forward/backward rehearsal; authenticated UI and upload-denial evidence.
+5. Release owner: prove backup age/retention and restore into disposable isolated database; reconcile counts/checksums and document restore timing. Never restore over production for rehearsal.
+6. Review schema/code rollout together: sessionVersion migration before new account queries; verify configured signing secret; plan sign-in impact. Rolling back code removes revocation enforcement and is not a safe security rollback. Do not remove the column while new code runs.
+7. Production release requires concrete reviewed decision. No main writes, real HR record changes, migration execution, secret changes or deployments authorized by this slice.
+
+Residual findings: legacy public /uploads still needs storage-reference inventory and protected-delivery migration; reject-vs-approve leave race and broader payroll correction/adjustment concurrency need separate review. Indeed eligibility remains external and unverified.

@@ -7,7 +7,7 @@ const { body, validationResult } = require("express-validator");
 const nodemailer = require("nodemailer");
 
 // Load environment variables
-const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "your_secret_key";
+const JWT_SECRET_KEY = require("../config/jwtSecret");
 const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "gmail";
 const EMAIL_USER = process.env.EMAIL_USER || "";
 const EMAIL_PASS = process.env.EMAIL_PASS || "";
@@ -284,6 +284,7 @@ const login = async (req, res) => {
         id: user.id,
         role: user.role,
         email: user.email,
+        sessionVersion: user.sessionVersion,
       },
       JWT_SECRET_KEY,
       { expiresIn: "8h" }
@@ -311,24 +312,7 @@ const login = async (req, res) => {
 };
 
 // Middleware to check if user is authenticated
-const isAuthenticated = (req, res, next) => {
-  try {
-    const token = req.header("Authorization")?.replace("Bearer ", "");
-
-    if (!token) {
-      return res
-        .status(401)
-        .json({ message: "No token, authorization denied" });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET_KEY);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    res.status(401).json({ message: "Token is not valid" });
-  }
-};
+const { authenticate: isAuthenticated } = require("../middleware/authMiddleware");
 
 // Middleware to check if user has admin role
 const isAdmin = (req, res, next) => {

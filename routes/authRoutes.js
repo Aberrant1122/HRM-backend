@@ -19,7 +19,8 @@ const {
 const router = express.Router();
 
 // Public routes
-router.post("/register", validateRegister, register);
+// Account creation with caller-selected roles requires an existing administrator.
+router.post("/register", isAuthenticated, isAdmin, validateRegister, register);
 router.post("/login", validateLogin, login);
 router.post("/request-password-reset", requestPasswordReset);
 router.post("/set-password", validateSetPassword, setPassword);

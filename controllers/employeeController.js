@@ -1,3 +1,4 @@
+const { canAccessConfidentialEmployee } = require("../middleware/employeeAccess");
 const { User, UserInfo, UserBankInfo } = require("../models");
 const { Op } = require("sequelize");
 const { validationResult } = require("express-validator");
@@ -25,7 +26,7 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
       queryOptions.include.push({
         model: UserInfo,
         as: "userInfo",
-        attributes: ["id", "department", "position", "contactNumber", "cnic", "startDate"],
+        attributes: ["id", "department", "position", "contactNumber", "startDate", ...(req.user.role === "admin" ? ["cnic"] : [])],
         ...(department && { where: { department } })
       });
     }
@@ -320,7 +321,9 @@ const getUserById = async (req, res) => {
         {
           model: UserInfo,
           as: "userInfo",
-          // Don't exclude any fields to see what's in the database
+          ...(canAccessConfidentialEmployee(req.user, userId) ? {} : {
+            attributes: ["department", "position", "companyName", "startDate", "reportingManager", "team"],
+          }),
           required: false,
         },
       ],
@@ -381,7 +384,7 @@ const getUserById = async (req, res) => {
         personalInfo: {
           ...userInfoData,
           // Use parsed attachments
-          attachments: Array.isArray(attachments) ? attachments : []
+          ...(canAccessConfidentialEmployee(req.user, userId) ? { attachments: Array.isArray(attachments) ? attachments : [] } : {})
         }
       }),
     };
@@ -425,77 +428,14 @@ const deactivateUser = async (req, res) => {
       });
     }
 
-    // Check if user is an employee (only employees should be permanently deleted)
-    if (user.role === "employee") {
-      // Check if employee is assigned as manager to any projects
-      const { Project, Task } = require("../models");
-      const managedProjects = await Project.findAll({
-        where: { managerId: userId },
-        attributes: ["id", "name"],
-        include: [
-          {
-            model: Task,
-            as: "tasks",
-            attributes: ["id"],
-          }
-        ],
-        transaction,
-      });
-
-      if (managedProjects.length > 0) {
-        // Count total tasks across all projects
-        const totalTasks = managedProjects.reduce((sum, project) => {
-          return sum + (project.tasks ? project.tasks.length : 0);
-        }, 0);
-
-        const projectNames = managedProjects.map(p => p.name).join(", ");
-
-        // Delete all tasks associated with these projects first
-        for (const project of managedProjects) {
-          if (project.tasks && project.tasks.length > 0) {
-            await Task.destroy({
-              where: { projectId: project.id },
-              transaction,
-            });
-          }
-        }
-
-        // Delete all projects managed by this employee
-        await Project.destroy({
-          where: { managerId: userId },
-          transaction,
-        });
-
-        console.log(`Deleted ${managedProjects.length} project(s) and ${totalTasks} task(s) for employee ${userId}`);
-      }
-
-      // Now permanently delete the employee from database
-      await user.destroy({ transaction });
-
-      await transaction.commit();
-
-      const deletionMessage = managedProjects.length > 0
-        ? `Employee deleted successfully. Also deleted ${managedProjects.length} project(s) and ${managedProjects.reduce((sum, p) => sum + (p.tasks ? p.tasks.length : 0), 0)} task(s) they were managing.`
-        : "Employee deleted successfully";
-
-      return res.status(200).json({
-        success: true,
-        message: deletionMessage,
-        deletedProjects: managedProjects.length,
-        deletedTasks: managedProjects.reduce((sum, p) => sum + (p.tasks ? p.tasks.length : 0), 0),
-      });
-    } else {
-      // For non-employees (like clients), just deactivate
-      user.status = "inactive";
-      await user.save({ transaction });
-
-      await transaction.commit();
-
-      return res.status(200).json({
-        success: true,
-        message: "User deactivated successfully",
-      });
-    }
+    // Account deactivation must retain employment, project and payroll history.
+    user.status = "inactive";
+    await user.save({ transaction });
+    await transaction.commit();
+    return res.status(200).json({
+      success: true,
+      message: "User deactivated successfully",
+    });
   } catch (error) {
     await transaction.rollback();
     console.error("Error deleting/deactivating user:", error);
@@ -1073,12 +1013,6 @@ const updateUserProfile = async (req, res) => {
       reportingManager,
       expectedHours,
     } = req.body;
-
-    // Log the incoming data for debugging
-    console.log('=== UPDATE PROFILE REQUEST ===');
-    console.log('User ID:', userId);
-    console.log('Request body:', JSON.stringify(req.body, null, 2));
-    console.log('Body keys:', Object.keys(req.body));
 
     const parsedDob = dob ? new Date(dob) : undefined;
 

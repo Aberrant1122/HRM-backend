@@ -118,6 +118,11 @@ module.exports = (sequelize, DataTypes) => {
           },
         },
       },
+      sessionVersion: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
       resetToken: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -161,6 +166,9 @@ module.exports = (sequelize, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
+          if (user.changed("role") || user.changed("status") || user.changed("password")) {
+            user.sessionVersion = Number(user.sessionVersion || 0) + 1;
+          }
           if (user.changed("password")) {
             user.password = await bcrypt.hash(user.password, 12);
             user.passwordChangedAt = new Date();
