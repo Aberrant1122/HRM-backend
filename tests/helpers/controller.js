@@ -1,15 +1,16 @@
 const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
-function load(file, dependencies) {
+function load(file, dependencies, env = {}) {
   const module = { exports: {} };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '..', '..', file), 'utf8'), {
     module, exports: module.exports, console,
+    __dirname: path.dirname(path.join(__dirname, '..', '..', file)),
     require: name => {
       if (name in dependencies) return dependencies[name];
       throw new Error(`Unexpected dependency: ${name}`);
     },
-    process: { env: {} },
+    process: { env },
   }, { filename: file });
   return module.exports;
 }

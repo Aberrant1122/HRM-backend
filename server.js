@@ -73,7 +73,7 @@ app.use(compression()); // Gzip compression
 app.use(express.json());
 
 // Cache Control Headers for Static Assets
-app.use('/uploads', (req, res, next) => {
+app.use('/uploads', require('./middleware/legacyUploads'), (req, res, next) => {
   res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
   next();
 }, express.static(path.join(__dirname, 'uploads')));
@@ -122,6 +122,7 @@ app.get('/', (req, res) => {
 
 const { ensureSchema } = require('./utils/schemaFix');
 const CronJobs = require('./utils/cronJobs');
+const runtimeSafety = require('./config/runtimeSafety');
 
 (async () => {
   try {
@@ -129,13 +130,13 @@ const CronJobs = require('./utils/cronJobs');
     logger.info("✅ Connected to MySQL database: hrm");
 
     // Run schema fix before starting server to ensure DB is ready
-    await ensureSchema();
+    if (runtimeSafety.startupSchemaRepairEnabled) await ensureSchema();
 
     server.listen(PORT, '0.0.0.0', () => {
       logger.info(`✅ Server running on port ${PORT}`);
 
       // Initialize cron jobs after server starts
-      CronJobs.init(io);
+      if (runtimeSafety.backgroundJobsEnabled) CronJobs.init(io);
     });
   } catch (error) {
     logger.error("❌ Database connection failed:", error);

@@ -91,6 +91,20 @@ test('finalized payroll deletion denied under the same period lock as transition
   child=null;res=response();await controller.deletePayrollPeriod({params:{id:1}},res);assert.equal(res.code,200);assert.equal(destroyed,true);
 });
 
+test('payroll transition does not send a success response before commit succeeds', async()=>{
+  const tx={LOCK:{UPDATE:'UPDATE'}};
+  const controller=load('controllers/payrollController.js',{
+    '../models':{
+      PayrollPeriod:{findByPk:async()=>({status:'reviewed',audit_log:[{action:'Existing'}],save:async()=>{}})},
+      EmployeePayroll:{update:async()=>{}},PayrollAdjustment:{},
+      sequelize:{transaction:async fn=>{await fn(tx);throw Error('Synthetic commit failure');}},
+    },sequelize:{Op:{}},'../utils/payrollService':{},
+  });
+  const res=response();
+  await assert.rejects(()=>controller.approvePayrollPeriod({params:{id:1},user:{id:1}},res),/commit failure/);
+  assert.equal(res.body,undefined);
+});
+
 test('competing approvals recheck remaining quota after acquiring employee lock', async () => {
   // Model transaction serialization; actual MySQL isolation still needs staging verification.
   let queue = Promise.resolve(), used=0;

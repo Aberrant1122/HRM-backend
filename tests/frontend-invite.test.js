@@ -27,6 +27,7 @@ test('normal frontend invitation action reaches protected backend; public regist
     '../models':models,'express-validator':require('express-validator'),
     nodemailer:{createTransport:()=>({sendMail:async message=>{mails++;assert.ok(message.html.includes('href="http://localhost:3000/"'));assert.equal(message.html.includes("human-resource-management-production"),false);}})},
     '../config/jwtSecret':secret,'../middleware/authMiddleware':middleware,
+    '../config/runtimeSafety':require('../config/runtimeSafety'),
   });
   const router=load('routes/authRoutes.js',{express,'../controllers/authController':controller});
   const app=express();app.use(express.json());app.use('/api/auth',router);

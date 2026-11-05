@@ -8,9 +8,7 @@ const nodemailer = require("nodemailer");
 
 // Load environment variables
 const JWT_SECRET_KEY = require("../config/jwtSecret");
-const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "gmail";
 const EMAIL_USER = process.env.EMAIL_USER || "";
-const EMAIL_PASS = process.env.EMAIL_PASS || "";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 const getAppUrl = (req) => {
@@ -31,13 +29,7 @@ const getAppUrl = (req) => {
 };
 
 // Email transporter
-const transporter = nodemailer.createTransport({
-  service: EMAIL_SERVICE,
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  },
-});
+const transporter = nodemailer.createTransport(require("../config/runtimeSafety").mailOptions());
 
 // Middleware for validation rules
 const validateInviteEmployee = [

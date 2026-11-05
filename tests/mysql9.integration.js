@@ -26,7 +26,7 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
     await t.test('baseline migrations execute in original order',async()=>{
       for(const file of migrations.filter(f=>f<'20261105000000')) {
         console.log('Baseline migration:',file);
-        await require(path.join(__dirname,'../migrations',file)).up(qi,Sequelize);
+        await require(path.join(process.env.BASELINE_CHECKOUT,'migrations',file)).up(qi,Sequelize);
       }
     });
     const BaselineUser=require(path.join(process.env.BASELINE_CHECKOUT,'models/user.js'))(db,DataTypes);
@@ -42,6 +42,53 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
     const User=require('../models/user')(db,DataTypes);
     const LeaveRequest=require('../models/leaveRequest')(db,DataTypes);
     const LeaveType=require('../models/leaveType')(db,DataTypes);
+    await t.test('manager correction preserves populated upgrade records and is safe to rerun/down',async()=>{
+      const manager=await User.create({fullName:'Synthetic Manager',email:'manager@example.invalid',role:'manager',status:'active'});
+      const correction=require('../migrations/20261105000002-preserve-manager-role');
+      for(let i=0;i<2;i++)await correction.up(qi,Sequelize);
+      await correction.down(qi,Sequelize);
+      const legacyClient=require('../migrations/20251202000000-add-client-role-to-users');
+      await legacyClient.up(qi,Sequelize);await legacyClient.up(qi,Sequelize);await legacyClient.down(qi,Sequelize);
+      const persisted=await User.findByPk(manager.id);assert.equal(persisted.role,'manager');assert.equal(persisted.sessionVersion,0);
+      assert.ok((await qi.describeTable('users')).role.type.includes('manager'));
+    });
+    await t.test('fresh migration path retains a manager created before the historical client step',async()=>{
+      const freshName=dbName+'_fresh';await admin.query('CREATE DATABASE `'+freshName+'`');
+      const fresh=new Sequelize(freshName,'root',process.env.HRM_TEST_MYSQL_PASSWORD||'',options);
+      try{
+        const freshQi=fresh.getQueryInterface();
+        for(const file of migrations){
+          await require(path.join(__dirname,'../migrations',file)).up(freshQi,Sequelize);
+          if(file==='20251116000000-add-manager-role-to-users.js'){
+            await fresh.query("INSERT INTO users(fullName,email,role,status,createdAt,updatedAt) VALUES('Fresh Manager','fresh@example.invalid','manager','active',NOW(),NOW())");
+          }
+        }
+        const [[manager]]=await fresh.query("SELECT role,sessionVersion FROM users WHERE email='fresh@example.invalid'");
+        assert.equal(manager.role,'manager');assert.equal(manager.sessionVersion,0);
+      }finally{await fresh.close();}
+    });
+    await t.test('sequelize-cli upgrades original migration metadata and reruns without replaying history',async()=>{
+      const cliName=dbName+'_cli';await admin.query('CREATE DATABASE `'+cliName+'`');
+      const cliDb=new Sequelize(cliName,'root',process.env.HRM_TEST_MYSQL_PASSWORD||'',options);
+      const execute=require('node:util').promisify(require('node:child_process').execFile);
+      const cli=require.resolve('sequelize-cli/lib/sequelize');
+      const cliEnv={...process.env,NODE_ENV:'test',DATABASE_URL:'',DB_URL:'',TEST_DB_HOST:'127.0.0.1',TEST_DB_PORT:'13379',TEST_DB_NAME:cliName,TEST_DB_USER:'root',TEST_DB_PASSWORD:process.env.HRM_TEST_MYSQL_PASSWORD||''};
+      const common=['--env','test','--config',path.join(__dirname,'../config/config.js')];
+      async function run(command,migrationsPath){return execute(process.execPath,[cli,command,...common,'--migrations-path',migrationsPath],{env:cliEnv,timeout:60000,maxBuffer:2*1024*1024});}
+      try{
+        await run('db:migrate',path.join(process.env.BASELINE_CHECKOUT,'migrations'));
+        const before=await cliDb.getQueryInterface().describeTable('users');assert.equal(before.sessionVersion,undefined);
+        await cliDb.query("INSERT INTO users(fullName,email,role,status,createdAt,updatedAt) VALUES('CLI Legacy','cli@example.invalid','employee','active',NOW(),NOW())");
+        await run('db:migrate',path.join(__dirname,'../migrations'));
+        await cliDb.query("UPDATE users SET role='manager' WHERE email='cli@example.invalid'");
+        const repeat=await run('db:migrate',path.join(__dirname,'../migrations'));assert.match(repeat.stdout,/No migrations were executed/);
+        const [recorded]=await cliDb.query('SELECT name FROM SequelizeMeta');assert.equal(recorded.length,migrations.length);
+        await run('db:migrate:undo',path.join(__dirname,'../migrations')); // Only final manager widening; no counter reset.
+        await run('db:migrate',path.join(__dirname,'../migrations'));
+        const [[manager]]=await cliDb.query("SELECT role,sessionVersion FROM users WHERE email='cli@example.invalid'");
+        assert.equal(manager.role,'manager');assert.equal(manager.sessionVersion,1);
+      }finally{await cliDb.close();}
+    });
     await t.test('existing baseline password still logs in after upgrade and returns a valid session',async()=>{
       const jwt=require('jsonwebtoken'),secret='synthetic-upgrade-login';
       const middleware=load('middleware/authMiddleware.js',{'../models':{User},'../config/jwtSecret':secret,jsonwebtoken:jwt});
@@ -50,11 +97,39 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
         '../models':{User},'express-validator':require('express-validator'),
         nodemailer:{createTransport:()=>({sendMail:async()=>assert.fail('Unexpected external mail')})},
         '../config/jwtSecret':secret,'../middleware/authMiddleware':middleware,
+    '../config/runtimeSafety':require('../config/runtimeSafety'),
       });
       const res=response();await auth.login({body:{email:old.email,password:'legacy-password'}},res);
       assert.equal(res.code,200);assert.equal(jwt.verify(res.body.token,secret).sessionVersion,0);
       let accepted=false;await middleware.authenticate({headers:{authorization:`Bearer ${res.body.token}`},query:{}},response(),()=>{accepted=true;});
       assert.ok(accepted);
+    });
+    await t.test('scoped migrator creates trigger without SUPER when binary logging is disabled',async()=>{
+      const [[settings]]=await admin.query('SELECT @@log_bin AS enabled');
+      assert.equal(settings.enabled,0,'Start disposable MySQL with --disable-log-bin to match Railway config');
+      const account=await User.create({fullName:'Restricted Synthetic',email:'restricted@example.invalid',role:'employee',status:'active'});
+      const suffix=Date.now().toString();
+      const migrator='hrm_m_'+suffix,writer='hrm_w_'+suffix;
+      await admin.query(`CREATE USER '${migrator}'@'localhost' IDENTIFIED BY 'synthetic-test-only'`);
+      await admin.query(`CREATE USER '${writer}'@'localhost' IDENTIFIED BY 'synthetic-test-only'`);
+      await admin.query(`GRANT SELECT, UPDATE, TRIGGER ON \`${dbName}\`.users TO '${migrator}'@'localhost'`);
+      await admin.query(`GRANT SELECT, UPDATE ON \`${dbName}\`.users TO '${writer}'@'localhost'`);
+      const restricted=new Sequelize(dbName,migrator,'synthetic-test-only',options);
+      const application=new Sequelize(dbName,writer,'synthetic-test-only',options);
+      const trigger=require('../migrations/20261105000001-enforce-session-revocation');
+      try{
+        await trigger.down(qi,Sequelize);
+        await trigger.up(restricted.getQueryInterface(),Sequelize);
+        const before=await User.findByPk(account.id);
+        await application.query("UPDATE users SET status='suspended' WHERE id=?",{replacements:[account.id]});
+        const after=await User.findByPk(account.id);assert.equal(after.sessionVersion,before.sessionVersion+1);
+        await application.query("UPDATE users SET status='active' WHERE id=?",{replacements:[account.id]});
+        // Restore root-owned trigger before dropping the synthetic restricted accounts.
+        await trigger.down(qi,Sequelize);await trigger.up(qi,Sequelize);
+      }finally{
+        await restricted.close();await application.close();
+        await admin.query(`DROP USER '${migrator}'@'localhost', '${writer}'@'localhost'`);
+      }
     });
     await t.test('stale concurrent saves, bulk updates, raw writes and upserts never reuse versions',async()=>{
       const a=await User.findByPk(old.id),b=await User.findByPk(old.id);
@@ -117,6 +192,41 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
       const ra=response(),rb=response();await Promise.all([controller.approveLeave({params:{id:a.id},user:{id:old.id}},ra),controller.approveLeave({params:{id:b.id},user:{id:old.id}},rb)]);
       assert.deepEqual([ra.code,rb.code].sort(),[200,409]);
       assert.equal(Number(await LeaveRequest.sum('totalDays',{where:{userId:employee.id,status:'approved'}})),3);
+    });
+    await t.test('payroll finalization competes safely with deletion and retains prior audit entries',async()=>{
+      const PayrollPeriod=require('../models/payrollPeriod')(db,DataTypes);
+      const EmployeePayroll=require('../models/employeePayroll')(db,DataTypes);
+      const controller=load('controllers/payrollController.js',{
+        '../models':{PayrollPeriod,EmployeePayroll,User,sequelize:db,PayrollAdjustment:{}},
+        sequelize:Sequelize,'../utils/payrollService':{},
+      });
+      const period=await PayrollPeriod.create({name:'Synthetic finalization',start_date:'2026-01-01',end_date:'2026-01-31',payroll_type:'monthly',status:'reviewed',created_by:old.id,audit_log:[{action:'Synthetic review'}]});
+      const row=await EmployeePayroll.create({payroll_period_id:period.id,employee_id:old.id,gross_salary:'100.00',total_deductions:'0.00',net_salary:'100.00',snapshot:{synthetic:true},status:'reviewed'});
+      const req={params:{id:period.id},user:{id:old.id,fullName:'Synthetic Admin'}};
+      const approved=response();await controller.approvePayrollPeriod(req,approved);assert.equal(approved.code,200);
+      const finalized=await PayrollPeriod.findByPk(period.id,{attributes:{include:['audit_log']}});assert.equal(finalized.audit_log.length,2);assert.equal(finalized.audit_log[0].action,'Synthetic review');
+      const a=response(),b=response();await Promise.all([controller.payPayrollPeriod(req,a),controller.deletePayrollPeriod(req,b)]);
+      assert.equal(a.code,200);assert.equal(b.code,409);assert.ok(await EmployeePayroll.findByPk(row.id));
+      const paid=await PayrollPeriod.findByPk(period.id,{attributes:{include:['audit_log']}});assert.equal(paid.audit_log.length,3);
+      const competing=await PayrollPeriod.create({name:'Synthetic contention',start_date:'2026-02-01',end_date:'2026-02-28',payroll_type:'monthly',status:'reviewed',created_by:old.id});
+      const child=await EmployeePayroll.create({payroll_period_id:competing.id,employee_id:old.id,gross_salary:'100',total_deductions:'0',net_salary:'100',snapshot:{synthetic:true},status:'reviewed'});
+      const ca=response(),cb=response(),cr={params:{id:competing.id},user:{id:old.id}};
+      await Promise.all([controller.approvePayrollPeriod(cr,ca),controller.deletePayrollPeriod(cr,cb)]);
+      if(ca.code===200){assert.equal(cb.code,409);assert.ok(await EmployeePayroll.findByPk(child.id));}
+      else{assert.equal(ca.code,404);assert.equal(cb.code,200);assert.equal(await PayrollPeriod.findByPk(competing.id),null);}
+      const clientController=load('controllers/clientController.js',{
+        bcryptjs:require('bcryptjs'),crypto:require('node:crypto'),sequelize:Sequelize,
+        '../models':{User,EmployeePayroll},'express-validator':require('express-validator'),
+        nodemailer:{createTransport:()=>({})},'../utils/pagination':{},'../config/runtimeSafety':require('../config/runtimeSafety'),
+      });
+      const former=await User.create({fullName:'Former employee client',email:'former@example.invalid',role:'employee',status:'active'});
+      const retained=await EmployeePayroll.create({payroll_period_id:period.id,employee_id:former.id,gross_salary:'100',total_deductions:'0',net_salary:'100',snapshot:{synthetic:true},status:'paid',locked:true});
+      await former.update({role:'client'});
+      const denial=response();await clientController.deleteClient({params:{id:former.id},user:{role:'admin',id:old.id}},denial);
+      assert.equal(denial.code,409);assert.ok(await User.findByPk(former.id));assert.ok(await EmployeePayroll.findByPk(retained.id));
+      const ordinary=await User.create({fullName:'Ordinary client',email:'ordinary@example.invalid',role:'client',status:'active'});
+      const deletion=response();await clientController.deleteClient({params:{id:ordinary.id},user:{role:'admin',id:old.id}},deletion);
+      assert.equal(deletion.code,200);assert.equal(await User.findByPk(ordinary.id),null);
     });
     await t.test('rollback preserves baseline rows; re-upgrade reinstates enforcement',async()=>{
       for(const migration of [...additions].reverse())await migration.down(qi,Sequelize);

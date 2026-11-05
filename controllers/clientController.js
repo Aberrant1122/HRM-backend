@@ -1,25 +1,16 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const { Op } = require("sequelize");
-const { User, UserInfo } = require("../models");
+const { User, UserInfo, EmployeePayroll } = require("../models");
 const { body, validationResult } = require("express-validator");
 const nodemailer = require("nodemailer");
 const { getPagination, getPagingData } = require("../utils/pagination");
 
 // Load environment variables
-const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "gmail";
-const EMAIL_USER = process.env.EMAIL_USER || "";
-const EMAIL_PASS = process.env.EMAIL_PASS || "";
-const APP_URL = process.env.APP_URL || "http://localhost:3000";
+const APP_URL = process.env.APP_URL || process.env.FRONTEND_URL || "http://localhost:3000";
 
 // Email transporter
-const transporter = nodemailer.createTransport({
-  service: EMAIL_SERVICE,
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  },
-});
+const transporter = nodemailer.createTransport(require("../config/runtimeSafety").mailOptions());
 
 // Validation rules for adding a client
 const validateAddClient = [
@@ -111,7 +102,6 @@ const addClient = async (req, res) => {
     // Send welcome email (outside of transaction)
     try {
       const loginUrl = `${APP_URL}/login`;
-      const productionLoginUrl = "https://human-resource-management-production-b7d0.up.railway.app/";
       await transporter.sendMail({
         to: email,
         subject: "Welcome to HRM System - Client Account Created",
@@ -125,7 +115,7 @@ const addClient = async (req, res) => {
               <li><strong>Password:</strong> ${password}</li>
             </ul>
             <p><strong>${fullName}</strong> can login through this link: <br />
-            <a href="${productionLoginUrl}" style="color: #2563eb; font-weight: bold;">${productionLoginUrl}</a></p>
+            <a href="${loginUrl}" style="color: #2563eb; font-weight: bold;">${loginUrl}</a></p>
             <p style="font-size: 0.9em; color: #666; margin-top: 20px;">For security reasons, we recommend changing your password after your first login.</p>
           </div>
         `,
@@ -450,19 +440,24 @@ const deleteClient = async (req, res) => {
   const { id } = req.params;
 
   try {
-    const client = await User.findOne({
-      where: { id, role: "client" },
+    const result = await User.sequelize.transaction(async (transaction) => {
+      const client = await User.findOne({
+        where: { id, role: "client" }, transaction, lock: transaction.LOCK.UPDATE,
+      });
+      if (!client) return { status: 404, body: { message: "Client not found" } };
+      // Login role changes must never provide a route around payroll retention.
+      // Any payroll history blocks parent deletion; account deactivation remains available.
+      const payroll = await EmployeePayroll.findOne({
+        where: { employee_id: id }, attributes: ["id"],
+        transaction, lock: transaction.LOCK.UPDATE,
+      });
+      if (payroll) {
+        return { status: 409, body: { message: "Payroll history must be retained. Deactivate this account instead." } };
+      }
+      await client.destroy({ transaction });
+      return { status: 200, body: { message: "Client deleted successfully" } };
     });
-
-    if (!client) {
-      return res.status(404).json({ message: "Client not found" });
-    }
-
-    await client.destroy();
-
-    return res.status(200).json({
-      message: "Client deleted successfully",
-    });
+    return res.status(result.status).json(result.body);
   } catch (error) {
     console.error("Error in deleteClient:", error);
     return res.status(500).json({
