@@ -10,11 +10,15 @@ const config = require("../config/config.js")[env];
 const db = {};
 
 let sequelize;
+const connectionUrl = config.url || (config.use_env_variable && process.env[config.use_env_variable]);
+if (config.use_env_variable && !connectionUrl) {
+  throw new Error(`Configured database URL variable ${config.use_env_variable} is missing`);
+}
 
 // Create Sequelize instance based on environment
-if (config.url) {
+if (connectionUrl) {
   // For production with DATABASE_URL
-  sequelize = new Sequelize(config.url, {
+  sequelize = new Sequelize(connectionUrl, {
     ...config,
     dialect: "mysql",
     logging: process.env.NODE_ENV === "development" ? console.log : false,

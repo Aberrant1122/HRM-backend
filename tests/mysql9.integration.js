@@ -40,6 +40,28 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
       assert.equal(row.sessionVersion,0);
     });
     const User=require('../models/user')(db,DataTypes);
+    await t.test('actual model startup resolves both URL aliases against the disposable database',async()=>{
+      const execute=require('node:util').promisify(require('node:child_process').execFile);
+      const source=`
+        const assert=require('node:assert/strict');
+        const Sequelize=require('sequelize');
+        const authenticate=Sequelize.prototype.authenticate;
+        Sequelize.prototype.authenticate=function(...args){
+          assert.equal(this.config.host,'127.0.0.1');
+          assert.equal(Number(this.config.port),13379);
+          assert.match(this.config.database,/^hrm_slice2_upgrade_\\d+$/);
+          return authenticate.apply(this,args);
+        };
+        const db=require('./models');
+        (async()=>{try{assert.ok(await db.User.count()>0);console.log('Guarded URL model boot passed');}
+        finally{await db.sequelize.close();}})().catch(e=>{console.error(e);process.exitCode=1;});`;
+      const url='mysql://root:'+encodeURIComponent(process.env.HRM_TEST_MYSQL_PASSWORD||'')+'@127.0.0.1:13379/'+dbName;
+      for(const variable of ['DATABASE_URL','DB_URL']){
+        const result=await execute(process.execPath,['-e',source],{cwd:path.join(__dirname,'..'),
+          env:{...process.env,NODE_ENV:'production',DATABASE_URL:'',DB_URL:'',[variable]:url},timeout:30000});
+        assert.match(result.stdout,/Guarded URL model boot passed/);
+      }
+    });
     const LeaveRequest=require('../models/leaveRequest')(db,DataTypes);
     const LeaveType=require('../models/leaveType')(db,DataTypes);
     await t.test('manager correction preserves populated upgrade records and is safe to rerun/down',async()=>{
