@@ -41,3 +41,18 @@ test('actual frontend profile action omits sensitive request/error payloads from
   }
   assert.equal(logs.join('\n').includes(sentinel),false);assert.equal(logs.length,0);
 });
+
+test('actual password action omits token/password/error sentinels on success and validation failure',{
+  skip:!process.env.FRONTEND_CHECKOUT&&'Set FRONTEND_CHECKOUT',
+},async()=>{
+  const checkout=path.resolve(process.env.FRONTEND_CHECKOUT),ts=require(path.join(checkout,'node_modules/typescript'));
+  const source=ts.transpileModule(fs.readFileSync(path.join(checkout,'lib/actions/auth.actions.ts'),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2020}}).outputText;
+  const module={exports:{}},logs=[],sentinel='QA03_PASSWORD_TOKEN_ERROR_SENTINEL';let status=200,body;
+  vm.runInNewContext(source,{module,exports:module.exports,process:{env:{NEXT_PUBLIC_BACKEND_URL:'http://127.0.0.1:13381/api'}},
+    console:Object.fromEntries(['log','warn','error'].map(name=>[name,(...args)=>logs.push(JSON.stringify(args))])),
+    require:name=>{if(name==='@/lib/auth/token')return{getAuthToken:()=> 'synthetic-only'};throw Error('Unexpected import '+name);},
+    fetch:async(url,options)=>{body=JSON.parse(options.body);return{ok:status===200,status,statusText:'Synthetic status',json:async()=>status===200?{success:true}:{error:sentinel,message:sentinel,errors:[{value:sentinel}]}};},
+  });
+  for(status of [200,400]){await module.exports.setPasswordAction({token:sentinel,newPassword:sentinel,confirmPassword:sentinel});assert.equal(body.newPassword,sentinel);}
+  assert.equal(logs.length,0);
+});
