@@ -18,7 +18,8 @@
     "test:frontend-contract": "node --test tests/frontend-invite.test.js",
     "test:mysql9": "node --test tests/mysql9.integration.js",
     "test:realtime": "node --test tests/realtime-access.test.js",
-    "test:history:mysql9": "node --test tests/employee-history.mysql9.test.js"
+    "test:history:mysql9": "node --test tests/employee-history.mysql9.test.js",
+    "test:onboarding:mysql9": "node --test tests/onboarding.mysql9.test.js"
   },
   "repository": {
     "type": "git",
