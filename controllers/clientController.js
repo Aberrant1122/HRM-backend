@@ -445,6 +445,22 @@ const deleteClient = async (req, res) => {
         where: { id, role: "client" }, transaction, lock: transaction.LOCK.UPDATE,
       });
       if (!client) return { status: 404, body: { message: "Client not found" } };
+      if (client.hasEmployeeHistory) {
+        return { status: 409, body: { message: 'Employee history must be retained. Deactivate this account instead.' } };
+      }
+      // Locking the parent serializes conversion/deletion and FK-backed child inserts.
+      // UserInfo alone is not employee provenance: genuine clients also have profiles.
+      const [[history]] = await User.sequelize.query(`SELECT
+        EXISTS(SELECT 1 FROM attendances WHERE userId = :id) OR
+        EXISTS(SELECT 1 FROM leave_requests WHERE userId = :id) OR
+        EXISTS(SELECT 1 FROM payroll_profiles WHERE employee_id = :id) OR
+        EXISTS(SELECT 1 FROM employee_payrolls WHERE employee_id = :id) OR
+        EXISTS(SELECT 1 FROM daily_work_records WHERE userId = :id) OR
+        EXISTS(SELECT 1 FROM userBankInfo WHERE userId = :id) AS retained`,
+      { replacements: { id }, transaction });
+      if (Number(history.retained)) {
+        return { status: 409, body: { message: 'Employment or financial history must be retained. Deactivate this account instead.' } };
+      }
       // Login role changes must never provide a route around payroll retention.
       // Any payroll history blocks parent deletion; account deactivation remains available.
       const payroll = await EmployeePayroll.findOne({

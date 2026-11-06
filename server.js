@@ -20,10 +20,7 @@ const socketIo = require('socket.io');
 const server = http.createServer(app);
 
 // Request Logging Middleware
-app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.originalUrl}`);
-  next();
-});
+app.use(require('./middleware/requestLogger')(logger));
 
 // Initialize Socket.IO
 const io = socketIo(server, {

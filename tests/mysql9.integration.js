@@ -105,7 +105,7 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
         await cliDb.query("UPDATE users SET role='manager' WHERE email='cli@example.invalid'");
         const repeat=await run('db:migrate',path.join(__dirname,'../migrations'));assert.match(repeat.stdout,/No migrations were executed/);
         const [recorded]=await cliDb.query('SELECT name FROM SequelizeMeta');assert.equal(recorded.length,migrations.length);
-        await run('db:migrate:undo',path.join(__dirname,'../migrations')); // Only final manager widening; no counter reset.
+        await run('db:migrate:undo',path.join(__dirname,'../migrations')); // Final retention down is deliberately non-contracting; no counter/provenance reset.
         await run('db:migrate',path.join(__dirname,'../migrations'));
         const [[manager]]=await cliDb.query("SELECT role,sessionVersion FROM users WHERE email='cli@example.invalid'");
         assert.equal(manager.role,'manager');assert.equal(manager.sessionVersion,1);
