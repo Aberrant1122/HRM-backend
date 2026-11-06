@@ -34,10 +34,38 @@ const opts={dialect:'mysql',host:'127.0.0.1',port:13379,logging:false};
   const ids={};
   for(const [role,name] of [['admin','Admin'],['employee','Employee'],['manager','Manager'],['client','Client']]){
     const user=await models.User.create({fullName:'Synthetic '+name,email:role+'@example.invalid',password:'Synthetic-local-123',role,status:'active'});
-    await models.UserInfo.create({userId:user.id,department:'development',position:'Synthetic',cnic:`00000-000000${user.id}-0`,salary:1234,contactNumber:'0000000000'});
+    await models.UserInfo.create({userId:user.id,department:'development',position:'Synthetic',cnic:`00000-000000${user.id}-0`,salary:1234,contactNumber:'0000000000',startDate:'2026-01-01T00:00:00.000Z'});
     ids[role]=user.id;
   }
   await models.Department.findOrCreate({where:{name:'development'},defaults:{description:'Synthetic test department',isActive:true}});
+  if(process.env.HRM_PEOPLE_FIXTURES==='1'){
+    for(let i=0;i<26;i++){
+      const user=await models.User.create({fullName:i===22?'Zz Literal 100%_\\':'Zz Pagination '+String(i).padStart(2,'0'),email:`pagination${i}@example.invalid`,role:'employee',status:['active','inactive','suspended'][i%3]});
+      if(i>=24)await models.UserInfo.create({userId:user.id,department:i===24?'legacy-satellite':'synthetic-research',position:'Synthetic Directory'});
+    }
+    await models.Department.create({name:'synthetic-research',isActive:true});
+    await models.Department.create({name:'synthetic-closed',isActive:false});
+  }
+  if(process.env.HRM_DASHBOARD_FIXTURES==='1'){
+    const other=[];
+    for(const n of [1,2,3])other.push(await models.User.findOne({where:{email:`pagination${n}@example.invalid`}}));
+    if(other.some(user=>!user))throw Error('Dashboard fixtures require People fixtures');
+    const day='2026-01-01';
+    await models.Attendance.bulkCreate([
+      {userId:ids.employee,date:day,status:'present'}, {userId:ids.employee,date:day,status:'present'},
+      {userId:ids.employee,date:day,status:'absent'}, {userId:other[0].id,date:day,status:'absent'},
+      {userId:other[1].id,date:day,status:'leave'}, {userId:other[2].id,date:day,status:'half-day'},
+      ...['admin','manager','client'].map(role=>({userId:ids[role],date:day,status:'present'})),
+    ].map(row=>({...row,clockIn:day+'T08:00:00.000Z'})));
+    const type=await models.LeaveType.create({name:'Synthetic dashboard leave',annual_quota:20});
+    const record=(userId,status,startDate=day,endDate=day,leaveMode='full-day')=>({userId,status,startDate,endDate,leaveTypeId:type.id,totalDays:leaveMode==='half-day'?0.5:1,leaveMode,reason:'Synthetic fixture'});
+    await models.LeaveRequest.bulkCreate([
+      record(ids.employee,'approved'),record(ids.employee,'approved','2025-12-31',day),
+      record(other[1].id,'approved',day,day,'half-day'), record(other[0].id,'approved','2025-12-01','2025-12-02'),
+      record(ids.employee,'pending'), record(other[0].id,'pending','2027-01-01','2027-01-01'),record(other[2].id,'rejected'),
+      ...['admin','manager','client'].map(role=>record(ids[role],'approved')),
+    ]);
+  }
   const objects=new Map();let storageWrites=0;
   // Protocol sink exercises actual AWS SDK/Multer HTTP writes, not S3 IAM/signature enforcement.
   const storage=http.createServer(async(req,res)=>{

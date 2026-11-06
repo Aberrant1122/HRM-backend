@@ -7,20 +7,30 @@ const { getPagination, getPagingData } = require("../utils/pagination");
 
 const getAllEmployeesWithUserInfo = async (req, res) => {
   try {
-    const { page, limit, includeUserInfo: includeUserInfoQuery, department } = req.query;
-    const includeUserInfo = (includeUserInfoQuery !== false && includeUserInfoQuery !== "false") || !!department;
+    const { page, limit, includeUserInfo: includeUserInfoQuery, department, status } = req.query;
+    const search = (req.query.search || '').trim();
+    const includeUserInfo = (includeUserInfoQuery !== false && includeUserInfoQuery !== "false") || !!department || !!search;
     const { limit: l, offset } = getPagination(page, limit);
 
     const queryOptions = {
       where: {
-        role: "employee"
+        role: "employee",
+        ...(status && { status }),
       },
       include: [],
       attributes: ["id", "fullName", "email", "role", "status", "profilePicture", "lastLogin"],
       limit: l,
       offset,
-      order: [["fullName", "ASC"]],
+      order: [["fullName", "ASC"], ["id", "ASC"]],
+      distinct: true,
     };
+
+    if (search) {
+      // Treat SQL LIKE metacharacters as literal directory text, never wildcard input.
+      const pattern = '%' + search.replace(/[\\%_]/g, '\\$&') + '%';
+      queryOptions.where[Op.or] = ['fullName', 'email', '$userInfo.department$', '$userInfo.position$']
+        .map(field => ({ [field]: { [Op.like]: pattern } }));
+    }
 
     if (includeUserInfo) {
       queryOptions.include.push({
@@ -63,7 +73,7 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
         totalPages: paginatedData.totalPages,
         currentPage: paginatedData.currentPage,
       },
-      meta: { includeUserInfo },
+      meta: { includeUserInfo, scope: 'employee-role-accounts', filters: { search, status: status || null, department: department || null } },
     });
   } catch (error) {
     console.error("Error fetching employees:", error);

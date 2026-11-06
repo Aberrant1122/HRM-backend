@@ -227,6 +227,7 @@ test('MySQL 9 baseline upgrade, revocation and competing leave transitions', {ti
       const upload={array:()=>((req,res,next)=>next()),single:()=>((req,res,next)=>next())};
       const router=load('routes/employeeRoutes.js',{
         express,'express-validator':require('express-validator'),'../controllers/employeeController':controllers,
+        '../controllers/employeeAccountSummaryController':{getEmployeeAccountSummary:(req,res)=>res.sendStatus(501)},
         '../middleware/authMiddleware':auth,'../middleware/employeeAccess':access,
         '../middleware/validationMiddleware':require('../middleware/validationMiddleware'),
         '../validations/bankInfoValidation':require('../validations/bankInfoValidation'),

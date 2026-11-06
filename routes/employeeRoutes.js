@@ -30,6 +30,8 @@ const { requireEmployeeAccess } = require("../middleware/employeeAccess");
 
 const router = express.Router();
 
+router.get('/account-summary', isAdmin, require('../controllers/employeeAccountSummaryController').getEmployeeAccountSummary);
+
 // Routes
 
 // Get a specific user's information (public endpoint)
@@ -54,6 +56,12 @@ router.get(
       .isBoolean()
       .withMessage("includeUserInfo must be a boolean")
       .toBoolean(),
+    query('page').optional().isString().bail().isInt({ min: 1, max: 1000000 }).toInt(),
+    query('limit').optional().isString().bail().isInt({ min: 1, max: 1000 }).toInt(),
+    query('search').optional().isString().bail().trim().isLength({ max: 100 }),
+    query('department').optional().isString().bail().trim().isLength({ min: 1, max: 255 }),
+    query('status').optional().isString().bail().isIn(['active', 'inactive', 'suspended']),
+    handleValidationErrors,
   ],
   getAllEmployeesWithUserInfo
 );
