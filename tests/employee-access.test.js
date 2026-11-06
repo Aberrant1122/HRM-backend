@@ -31,6 +31,7 @@ test('bank and attachment routes enforce access before handlers and upload side 
   load('routes/employeeRoutes.js', {
     express: { Router: () => router }, 'express-validator': { param: validator, query: validator },
     '../controllers/employeeController': controllers,
+    '../controllers/employeeAccountSummaryController': { getEmployeeAccountSummary: noop },
     '../middleware/authMiddleware': { isAdmin: noop },
     '../middleware/employeeAccess': access,
     '../middleware/validationMiddleware': { handleValidationErrors: noop },

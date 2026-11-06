@@ -17,7 +17,7 @@ function load(file, dependencies, env = {}) {
 }
 
 function response() {
-  return { code: 200, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
+  return { code: 200, headers: {}, setHeader(name,value) { this.headers[name]=value; }, status(code) { this.code = code; return this; }, json(body) { this.body = body; return this; } };
 }
 
 
