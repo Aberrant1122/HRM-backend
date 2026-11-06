@@ -12,7 +12,7 @@ const {
   getDailyWorkRecords,
 } = require("../controllers/attendanceController");
 
-const { isAdminOrManager } = require("../middleware/authMiddleware");
+const { isAdmin, isAdminOrManager } = require("../middleware/authMiddleware");
 const { uploadTaskDeliverables } = require("../middleware/upload");
 
 // For employees
@@ -27,7 +27,7 @@ router.get("/active-tasks", getActiveTasksForCheckout);
 router.get("/daily-work-records", isAdminOrManager, getDailyWorkRecords);
 
 // For admin
-router.get("/today-all-employees", getAllUsersTodaysAttendance);
-router.get("/all", getAllAttendance);
+router.get("/today-all-employees", isAdmin, getAllUsersTodaysAttendance);
+router.get("/all", isAdmin, getAllAttendance);
 
 module.exports = router;

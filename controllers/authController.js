@@ -7,10 +7,8 @@ const { body, validationResult } = require("express-validator");
 const nodemailer = require("nodemailer");
 
 // Load environment variables
-const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "your_secret_key";
-const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "gmail";
+const JWT_SECRET_KEY = require("../config/jwtSecret");
 const EMAIL_USER = process.env.EMAIL_USER || "";
-const EMAIL_PASS = process.env.EMAIL_PASS || "";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 const getAppUrl = (req) => {
@@ -31,13 +29,7 @@ const getAppUrl = (req) => {
 };
 
 // Email transporter
-const transporter = nodemailer.createTransport({
-  service: EMAIL_SERVICE,
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  },
-});
+const transporter = nodemailer.createTransport(require("../config/runtimeSafety").mailOptions());
 
 // Middleware for validation rules
 const validateInviteEmployee = [
@@ -181,7 +173,7 @@ const inviteEmployee = async (req, res) => {
               <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;" />
               <p style="font-size: 0.9em;">Once your password is set, you can access your dashboard anytime at:</p>
               <p style="background-color: #f3f4f6; padding: 10px; border-radius: 4px; text-align: center;">
-                <a href="https://human-resource-management-production-b7d0.up.railway.app/" style="color: #2563eb; text-decoration: none; font-weight: 500;">Go to Portal</a>
+                <a href="${baseUrl}/" style="color: #2563eb; text-decoration: none; font-weight: 500;">Go to Portal</a>
               </p>
             </div>
             <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 0.8em; color: #9ca3af;">
@@ -284,6 +276,7 @@ const login = async (req, res) => {
         id: user.id,
         role: user.role,
         email: user.email,
+        sessionVersion: user.sessionVersion,
       },
       JWT_SECRET_KEY,
       { expiresIn: "8h" }
@@ -311,24 +304,7 @@ const login = async (req, res) => {
 };
 
 // Middleware to check if user is authenticated
-const isAuthenticated = (req, res, next) => {
-  try {
-    const token = req.header("Authorization")?.replace("Bearer ", "");
-
-    if (!token) {
-      return res
-        .status(401)
-        .json({ message: "No token, authorization denied" });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET_KEY);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    res.status(401).json({ message: "Token is not valid" });
-  }
-};
+const { authenticate: isAuthenticated } = require("../middleware/authMiddleware");
 
 // Middleware to check if user has admin role
 const isAdmin = (req, res, next) => {

@@ -1,3 +1,4 @@
+const { emitToUser } = require('../utils/realtimeAccess');
 const { ProjectCommunication, User, Project } = require('../models');
 const { Op } = require('sequelize');
 const { getPagination, getPagingData } = require('../utils/pagination');
@@ -99,7 +100,7 @@ class ProjectCommunicationController {
       if (io) {
         // Notify project manager
         if (project.managerId && project.managerId !== senderId) {
-          io.to(`user_${project.managerId}`).emit('new_message', {
+          await emitToUser(io, project.managerId, 'new_message', {
             projectId,
             message: `New message in project "${project.name}"`,
             communication: createdCommunication
@@ -108,7 +109,7 @@ class ProjectCommunicationController {
 
         // Notify client (only if not private or if client is sender)
         if (projectClient && projectClient.id !== senderId && !isPrivate) {
-          io.to(`user_${projectClient.id}`).emit('new_message', {
+          await emitToUser(io, projectClient.id, 'new_message', {
             projectId,
             message: `New message in project "${project.name}"`,
             communication: createdCommunication

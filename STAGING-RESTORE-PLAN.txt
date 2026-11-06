@@ -1,0 +1,4 @@
+Superseded — 6 November 2026
+The user declined separate hosted staging and the proposed $35/month allowance.
+Use EXISTING-ENVIRONMENT-RELEASE-PLAN.txt as the active release plan.
+No extra paid resources are requested or authorized. Local capture/job controls remain useful for synthetic verification, but do not authorize production configuration changes.

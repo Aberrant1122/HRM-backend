@@ -26,6 +26,8 @@ const {
 const { uploadEmployeeAttachments, uploadProfilePicture: uploadProfilePictureMiddleware } = require("../middleware/upload");
 const profileValidation = require("../validations/profileValidation");
 
+const { requireEmployeeAccess } = require("../middleware/employeeAccess");
+
 const router = express.Router();
 
 // Routes
@@ -66,6 +68,7 @@ router.get(
       .toInt(),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   getUserBankDetails
 );
 
@@ -94,6 +97,7 @@ router.post(
     bankInfoValidation,
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   addUserBankInfo
 );
 
@@ -108,6 +112,7 @@ router.put(
     ...updateBankInfoValidation,
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   updateUserBankInfo
 );
 
@@ -121,6 +126,7 @@ router.post(
       .toInt(),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   uploadEmployeeAttachments.array("attachments", 10), // Allow up to 10 files
   addEmployeeAttachments
 );
@@ -138,6 +144,7 @@ router.delete(
       .withMessage("Attachment ID is required"),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   removeEmployeeAttachment
 );
 
@@ -197,6 +204,7 @@ router.post(
       .toInt(),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   uploadProfilePictureMiddleware.single("profilePicture"),
   uploadProfilePicture
 );

@@ -326,17 +326,18 @@ const addToAuditLog = (currentLog, action, user, prevStatus, newStatus) => {
  * Transition Payroll Period Status with Strict State Machine Logic
  */
 const updatePayrollPeriodStatus = async (req, res, targetStatus, allowedPrevStatus) => {
-    return await sequelize.transaction(async (transaction) => {
+    const result = await sequelize.transaction(async (transaction) => {
         const { id } = req.params;
 
         // Use row-level locking on the period to prevent concurrent status updates
         const period = await PayrollPeriod.findByPk(id, {
+            attributes: { include: ["audit_log"] },
             lock: transaction.LOCK.UPDATE,
             transaction
         });
 
         if (!period) {
-            return res.status(404).json({ success: false, message: "Payroll period not found." });
+            return { status: 404, body: { success: false, message: "Payroll period not found." } };
         }
 
         // Strict Status Flow Validation
@@ -351,10 +352,10 @@ const updatePayrollPeriodStatus = async (req, res, targetStatus, allowedPrevStat
         const targetRank = statusMap[targetStatus];
 
         if (targetRank !== currentRank + 1) {
-            return res.status(400).json({
+            return { status: 400, body: {
                 success: false,
                 message: `Invalid transition. Status flow must be: Draft -> Reviewed -> Approved -> Paid. Current: ${period.status}, Target: ${targetStatus}`
-            });
+            } };
         }
 
         const prevStatus = period.status;
@@ -380,12 +381,13 @@ const updatePayrollPeriodStatus = async (req, res, targetStatus, allowedPrevStat
             transaction
         });
 
-        return res.status(200).json({
+        return { status: 200, body: {
             success: true,
             message: `Payroll period ${targetStatus} successfully`,
             data: period
-        });
+        } };
     });
+    return res.status(result.status).json(result.body);
 };
 
 
@@ -456,18 +458,28 @@ const getEmployeePayrollHistory = async (req, res) => {
 const deletePayrollPeriod = async (req, res) => {
     try {
         const { id } = req.params;
-        const period = await PayrollPeriod.findByPk(id);
-
-        if (!period) {
-            return res.status(404).json({ success: false, message: "Payroll period not found." });
-        }
-
-        await period.destroy();
-
-        return res.status(200).json({
-            success: true,
-            message: "Payroll period deleted successfully",
+        const result = await sequelize.transaction(async (transaction) => {
+            // Share the period lock used by status transitions.
+            const period = await PayrollPeriod.findByPk(id, {
+                transaction, lock: transaction.LOCK.UPDATE,
+            });
+            if (!period) {
+                return { status: 404, body: { success: false, message: "Payroll period not found." } };
+            }
+            const finalizedPayroll = await EmployeePayroll.findOne({
+                where: {
+                    payroll_period_id: id,
+                    [Op.or]: [{ locked: true }, { status: { [Op.in]: ["approved", "paid"] } }],
+                },
+                transaction, lock: transaction.LOCK.UPDATE,
+            });
+            if (["approved", "paid"].includes(period.status) || finalizedPayroll) {
+                return { status: 409, body: { success: false, message: "Finalized payroll history cannot be deleted." } };
+            }
+            await period.destroy({ transaction });
+            return { status: 200, body: { success: true, message: "Payroll period deleted successfully" } };
         });
+        return res.status(result.status).json(result.body);
     } catch (error) {
         console.error("Error deleting payroll period:", error);
         return res.status(500).json({ success: false, message: "Failed to delete payroll period" });

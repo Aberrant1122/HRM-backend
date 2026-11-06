@@ -118,6 +118,12 @@ module.exports = (sequelize, DataTypes) => {
           },
         },
       },
+      sessionVersion: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      hasEmployeeHistory: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       resetToken: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -161,6 +167,7 @@ module.exports = (sequelize, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
+          // Database trigger revokes sessions atomically for every mutation path.
           if (user.changed("password")) {
             user.password = await bcrypt.hash(user.password, 12);
             user.passwordChangedAt = new Date();

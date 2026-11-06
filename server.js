@@ -20,10 +20,7 @@ const socketIo = require('socket.io');
 const server = http.createServer(app);
 
 // Request Logging Middleware
-app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.originalUrl}`);
-  next();
-});
+app.use(require('./middleware/requestLogger')(logger));
 
 // Initialize Socket.IO
 const io = socketIo(server, {
@@ -73,7 +70,7 @@ app.use(compression()); // Gzip compression
 app.use(express.json());
 
 // Cache Control Headers for Static Assets
-app.use('/uploads', (req, res, next) => {
+app.use('/uploads', require('./middleware/legacyUploads'), (req, res, next) => {
   res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
   next();
 }, express.static(path.join(__dirname, 'uploads')));
@@ -96,19 +93,7 @@ app.use((err, req, res, next) => {
 app.set('io', io);
 
 // Socket.IO connection handling
-io.on('connection', (socket) => {
-  // logger.info(`User connected: ${socket.id}`);
-
-  // Join user room for notifications
-  socket.on('join', (userId) => {
-    socket.join(`user_${userId}`);
-    // logger.info(`User ${userId} joined room user_${userId}`);
-  });
-
-  socket.on('disconnect', () => {
-    // logger.info(`User disconnected: ${socket.id}`);
-  });
-});
+require('./utils/realtimeAccess').configureRealtimeAccess(io);
 
 // Test Database Connection
 
@@ -122,6 +107,7 @@ app.get('/', (req, res) => {
 
 const { ensureSchema } = require('./utils/schemaFix');
 const CronJobs = require('./utils/cronJobs');
+const runtimeSafety = require('./config/runtimeSafety');
 
 (async () => {
   try {
@@ -129,13 +115,13 @@ const CronJobs = require('./utils/cronJobs');
     logger.info("✅ Connected to MySQL database: hrm");
 
     // Run schema fix before starting server to ensure DB is ready
-    await ensureSchema();
+    if (runtimeSafety.startupSchemaRepairEnabled) await ensureSchema();
 
     server.listen(PORT, '0.0.0.0', () => {
       logger.info(`✅ Server running on port ${PORT}`);
 
       // Initialize cron jobs after server starts
-      CronJobs.init(io);
+      if (runtimeSafety.backgroundJobsEnabled) CronJobs.init(io);
     });
   } catch (error) {
     logger.error("❌ Database connection failed:", error);
