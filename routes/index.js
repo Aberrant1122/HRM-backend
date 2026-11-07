@@ -33,6 +33,7 @@ router.use("/leaves", leaveRoutes);
 router.use("/payroll", payrollRoutes);
 router.use("/project-communications", projectCommunicationRoutes);
 router.use("/dashboard", dashboardRoutes);
+router.use("/performance", require('./performanceRoutes'));
 router.use("/offboarding", require('./offboardingRoutes'));
 router.use("/onboarding", require('./onboardingRoutes'));
 router.use("/probation", require('./probationRoutes'));

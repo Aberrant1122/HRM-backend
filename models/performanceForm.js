@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('PerformanceForm',{name:{type:D.STRING(100),allowNull:false},questions:{type:D.JSON,allowNull:false},actorId:{type:D.INTEGER,allowNull:false},reason:{type:D.STRING(1000),allowNull:false},commandKey:{type:D.STRING(36),allowNull:false,unique:true},payloadHash:{type:D.STRING(64),allowNull:false}},{tableName:'performance_forms'});
