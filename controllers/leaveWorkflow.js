@@ -21,6 +21,7 @@ module.exports=models=>{
   async function quota(type,userId,total,t){
     // Preserve the existing rule for compatibility; this is not approval of a company leave-year policy.
     const year=new Date().getFullYear();
+    if(!require('../utils/leaveQuota')(type.annual_quota))fail(409,'Configured annual quota requires data review; leave decisions are blocked');
     if(type.annual_quota>0){
       const approved=await LeaveRequest.findAll({where:{userId,leaveTypeId:type.id,status:'approved',startDate:{[Op.gte]:year+'-01-01',[Op.lte]:year+'-12-31'}},attributes:['startDate','endDate','leaveMode','totalDays'],transaction:t});
       let used=0;
