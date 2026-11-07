@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('PolicyRevision',{documentId:{type:D.INTEGER,allowNull:false},number:{type:D.INTEGER,allowNull:false},title:{type:D.STRING(200),allowNull:false},content:{type:D.TEXT('medium'),allowNull:false},authoredBy:{type:D.INTEGER,allowNull:false},publishedAt:{type:D.DATE,allowNull:true}},{tableName:'policy_revisions'});
