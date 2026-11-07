@@ -9,13 +9,15 @@ test('admin attendance reports deny employee/manager/client while self-service r
     '../middleware/attendanceMultipart':(req,res,next)=>next(),
     '../models':{}, '../services/attendanceRecovery':()=>controller,
     '../controllers/attendanceFacts':()=>new Proxy({}, {get:()=>handler}),
+    '../controllers/attendanceCorrections':()=>controller,
+    '../controllers/attendanceCorrectionPermissions':()=>({access:handler,accounts:handler,history:handler,command:handler,read:(req,res,next)=>middleware.isAdmin(req,res,next)}),
   });
   const app=express();app.use((req,res,next)=>{req.user={id:1,role:req.headers['x-synthetic-role']};next();});app.use(router);
   const server=await new Promise(resolve=>{const value=app.listen(0,'127.0.0.1',()=>resolve(value));});
   try{
-    for(const role of ['employee','manager','client','admin'])for(const endpoint of ['/all','/today-all-employees','/today','/history']){
+    for(const role of ['employee','manager','client','admin'])for(const endpoint of ['/all','/today-all-employees','/export','/today','/history']){
       const response=await fetch('http://127.0.0.1:'+server.address().port+endpoint,{headers:{'x-synthetic-role':role}});
-      assert.equal(response.status,['/all','/today-all-employees'].includes(endpoint)&&role!=='admin'?403:200,role+endpoint);
+      assert.equal(response.status,['/all','/today-all-employees','/export'].includes(endpoint)&&role!=='admin'?403:200,role+endpoint);
     }
   }finally{await new Promise(resolve=>server.close(resolve));}
 });

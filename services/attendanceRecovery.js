@@ -89,6 +89,7 @@ module.exports = function createRecovery(models, store = objectStore()) {
       let record = records[0];
       if (action === 'in' && record) throw fail(409, 'Already clocked in for today');
       if (action === 'out' && record?.clockOut) throw fail(409, 'Already clocked out for today');
+      if (action === 'out' && record && !record.clockIn) throw fail(409, 'Attendance has no recorded clock-in. Request a correction.');
       if (attendanceId !== (record?.id || null) && action === 'out') throw fail(409, 'Attendance session changed. Review before saving.');
       if (taskId) {
         const task = await Task.findOne({ where: { id: taskId, assigneeId: account.id, isActive: true }, transaction, lock: transaction.LOCK.UPDATE });

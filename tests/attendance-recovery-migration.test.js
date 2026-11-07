@@ -8,7 +8,8 @@ test('populated attendance recovery upgrade via actual CLI metadata and no-op re
   const schema='hrm_attendance_upgrade_'+Date.now();
   try{
     await admin.query('CREATE DATABASE `'+schema+'`');db=new Sequelize(schema,'root','',opts);const qi=db.getQueryInterface();
-    const names=fs.readdirSync(path.join(__dirname,'../migrations')).filter(n=>n.endsWith('.js')&&!n.startsWith('20261107000000')).sort();
+    const target='20261107000000-attendance-command-recovery.js';
+    const names=fs.readdirSync(path.join(__dirname,'../migrations')).filter(n=>n.endsWith('.js')&&n<target).sort();
     for(const name of names)await require('../migrations/'+name).up(qi,Sequelize);
     await qi.createTable('SequelizeMeta',{name:{type:DataTypes.STRING,primaryKey:true,allowNull:false}});await qi.bulkInsert('SequelizeMeta',names.map(name=>({name})));
     const User=require('../models/user')(db,DataTypes), Attendance=require('../models/attendance')(db,DataTypes);
@@ -19,7 +20,7 @@ test('populated attendance recovery upgrade via actual CLI metadata and no-op re
     const task=await Task.create({title:'Synthetic migration task',createdBy:user.id,assigneeId:user.id,projectId:project.id});
     const work=await Work.create({userId:user.id,attendanceId:old.id,taskId:task.id,date:'2026-01-01'});
     const cli=require.resolve('sequelize-cli/lib/sequelize'), env={...process.env,NODE_ENV:'test',DATABASE_URL:'',DB_URL:'',TEST_DB_HOST:'127.0.0.1',TEST_DB_PORT:'13379',TEST_DB_NAME:schema,TEST_DB_USER:'root',TEST_DB_PASSWORD:''};
-    const run=(command='db:migrate')=>execute(process.execPath,[cli,command,'--env','test','--config',path.join(__dirname,'../config/config.js')],{cwd:path.join(__dirname,'..'),env,timeout:60000});
+    const run=(command='db:migrate')=>execute(process.execPath,[cli,command,'--env','test','--config',path.join(__dirname,'../config/config.js'),...(command==='db:migrate'?['--to',target]:[])],{cwd:path.join(__dirname,'..'),env,timeout:60000});
     const first=await run();assert.match(first.stdout,/attendance-command-recovery/);assert.equal((await old.reload()).status,'leave');
     assert.equal((await qi.describeTable('daily_work_records')).taskId.allowNull,true);
     assert.equal((await work.reload()).taskId,task.id);

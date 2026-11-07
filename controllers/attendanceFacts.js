@@ -1,5 +1,5 @@
 const { Op, fn, col, where: expression } = require('sequelize');
-const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && !isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+const validDate = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number(value.slice(0, 4)) >= 1000 && !isNaN(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
 const hours = value => { const minutes = Math.round(Number(value) * 60); return `${Math.floor(minutes / 60)}h ${minutes % 60}m`; };
 const day = date => new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' });
 const raw = row => ({ id: row.id, userId: row.userId, date: row.date, day: day(row.date), status: row.status || 'unknown', clockIn: row.clockIn ? new Date(row.clockIn).toISOString() : null, clockOut: row.clockOut ? new Date(row.clockOut).toISOString() : null, totalHours: row.totalHours == null ? null : Number(row.totalHours), formattedHours: row.totalHours == null ? null : hours(row.totalHours) });
@@ -57,5 +57,37 @@ module.exports = ({ sequelize: db, Attendance, User }) => {
       return { success: true, [global ? 'attendance' : 'data']: data, pagination: { totalItems: result.count, totalPages: Math.ceil(result.count / limit), currentPage: page } };
     });
   });
-  return { today, weekly, directory, all: listing(true), history: listing(false) };
+  const monthlyExport = async (req, res) => {
+    try {
+      const month = req.query.month, format = req.query.format ?? 'csv';
+      if (Object.keys(req.query).some(k => !['month','format'].includes(k)) || !['csv','xlsx'].includes(format) || typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || !validDate(month + '-01')) invalid();
+      const year = Number(month.slice(0, 4)), index = Number(month.slice(5)) - 1;
+      const days = [31, year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][index];
+      const start = month + '-01', end = month + '-' + days;
+      const rows = await db.transaction({ isolationLevel: 'REPEATABLE READ', readOnly: true }, async transaction => {
+        const where = { date: { [Op.between]: [start, end] } };
+        const count = await Attendance.count({ where, transaction });
+        const maximum=format==='xlsx'?10000:50000;
+        if (count > maximum) throw Object.assign(Error(format==='xlsx'?'Excel export is limited to 10,000 records. CSV supports up to 50,000.':'CSV export is limited to 50,000 records.'), { status: 413 });
+        const records = await Attendance.findAll({ where, order: [['date', 'ASC'], ['userId', 'ASC'], ['id', 'ASC']], transaction });
+        const users = await User.findAll({ where: { id: { [Op.in]: [...new Set(records.map(r => r.userId))] } }, attributes: ['id', 'fullName', 'email', 'role'], transaction });
+        const byUser = new Map(users.map(u => [u.id, u])), counts = new Map();
+        for (const r of records) { const key = `${r.userId}:${r.date}`; counts.set(key, (counts.get(key) || 0) + 1); }
+        return records.map(record => { const r = raw(record), u = byUser.get(r.userId), count = counts.get(`${r.userId}:${r.date}`); return [r.id, r.userId, u?.fullName, u?.email, u?.role, r.date, count > 1 ? 'conflict' : 'recorded', count, record.status ?? null, r.clockIn, r.clockOut, r.totalHours]; });
+      });
+      const cell = value => { let text = value == null ? '' : String(value); if (/^[\s]*[=+\-@]/.test(text)) text = "'" + text; return '"' + text.replace(/"/g, '""') + '"'; };
+      const header = ['Record ID', 'Account ID', 'Name', 'Email', 'Current account role', 'Recorded date', 'Record state', 'Records on date', 'Stored status', 'Clock in (ISO)', 'Clock out (ISO)', 'Recorded total hours'];
+      if(format==='xlsx'){
+        const workbook=require('../utils/attendanceWorkbook')(header,rows);
+        res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition',`attachment; filename="attendance-records-${month}.xlsx"`);
+        res.setHeader('Cache-Control','no-store');return res.send(workbook);
+      }
+      const csv = '\uFEFF' + [header, ...rows].map(row => row.map(cell).join(',')).join('\r\n') + '\r\n';
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="attendance-records-${month}.csv"`);
+      res.setHeader('Cache-Control', 'no-store'); res.send(csv);
+    } catch (error) { res.status(error.status || 503).json({ message: error.status ? error.message : 'Attendance export unavailable' }); }
+  };
+  return { today, weekly, directory, all: listing(true), history: listing(false), monthlyExport };
 };
