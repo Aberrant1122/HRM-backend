@@ -15,6 +15,7 @@ module.exports = (sequelize, DataTypes) => {
 
     PayrollProfile.init(
         {
+            salary_revision: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
             employee_id: {
                 type: DataTypes.INTEGER,
                 allowNull: false,
@@ -71,6 +72,14 @@ module.exports = (sequelize, DataTypes) => {
             timestamps: true,
             createdAt: "created_at",
             updatedAt: "updated_at",
+            hooks: {
+                beforeUpdate(profile, options) {
+                    if (['base_salary','salary_type','salary_revision'].some(field => profile.changed(field)) && !options.salaryRevisionCommand) throw new Error('Use the retained salary revision workflow');
+                },
+                beforeBulkUpdate(options) {
+                    if (['base_salary','salary_type','salary_revision'].some(field => Object.hasOwn(options.attributes,field)) && !options.salaryRevisionCommand) throw new Error('Use the retained salary revision workflow');
+                },
+            },
         }
     );
 
