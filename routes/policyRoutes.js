@@ -1,0 +1,2 @@
+const router=require('express').Router(),{isAdmin}=require('../middleware/authMiddleware'),c=require('../controllers/policyController')(require('../models'));
+router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});router.get('/mine',c.mine);router.get('/mine/:assignmentId',c.mineDetail);router.post('/receipts',c.receipt);router.use(isAdmin);router.get('/',c.page);router.get('/:documentId/:kind',c.page);router.post('/commands',c.command);module.exports=router;
