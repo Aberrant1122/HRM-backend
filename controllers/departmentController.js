@@ -29,8 +29,9 @@ const getAllDepartments = async (req, res) => {
 const createDepartment = async (req, res) => {
   try {
     const { name, description } = req.body;
+    if(description!==undefined&&description!==null&&typeof description!=="string")return res.status(400).json({success:false,message:"Description must be text or null"});
 
-    if (!name || !name.trim()) {
+    if (typeof name !== "string" || !name.trim()) {
       return res.status(400).json({
         success: false,
         message: "Department name is required",
@@ -53,31 +54,7 @@ const createDepartment = async (req, res) => {
     const existingDepartment = allDepartments.find(
       dept => dept.name.toLowerCase() === trimmedName.toLowerCase()
     );
-    if (existingDepartment) {
-      if (existingDepartment.isActive) {
-        return res.status(409).json({
-          success: false,
-          message: "Department already exists",
-        });
-      } else {
-        const department = await Department.findByPk(existingDepartment.id);
-        department.name = trimmedName;
-        if (description !== undefined) {
-          department.description = description?.trim() || null;
-        }
-        department.isActive = true;
-        await department.save();
-        return res.status(200).json({
-          success: true,
-          message: "Department restored successfully",
-          data: {
-            id: department.id,
-            name: department.name,
-            description: department.description,
-          },
-        });
-      }
-    }
+    if (existingDepartment) return res.status(409).json({success:false,message:existingDepartment.isActive?'Department already exists':'Department name is retained by an archived category. Use Restore to reactivate it.'});
 
     const department = await Department.create({
       name: trimmedName,
@@ -127,7 +104,9 @@ const updateDepartment = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, description } = req.body;
+    if(description!==undefined&&description!==null&&typeof description!=='string')return res.status(400).json({success:false,message:'Description must be text or null'});
 
+    if(name!==undefined&&(typeof name!=='string'||name.trim().length<2||name.trim().length>100))return res.status(400).json({success:false,message:'Department name must contain 2–100 characters'});
     const department = await Department.findByPk(id);
     if (!department) {
       return res.status(404).json({
@@ -141,7 +120,6 @@ const updateDepartment = async (req, res) => {
       const allDepartments = await Department.findAll({
         attributes: ['id', 'name'],
         where: {
-          isActive: true,
           id: { [Op.ne]: id }
         }
       });
@@ -177,6 +155,7 @@ const updateDepartment = async (req, res) => {
     });
   } catch (error) {
     console.error("Error updating department:", error);
+    if(error.name==='SequelizeUniqueConstraintError')return res.status(409).json({success:false,message:'Department name already exists, including archived categories'});
     return res.status(500).json({
       success: false,
       message: "Error updating department",
