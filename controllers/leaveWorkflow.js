@@ -21,7 +21,9 @@ module.exports=models=>{
   async function quota(type,userId,total,t){
     // Preserve the existing rule for compatibility; this is not approval of a company leave-year policy.
     const year=new Date().getFullYear();
-    if(type.annual_quota>0){
+    if(!require('../utils/leaveQuota')(type.annual_quota))fail(409,'Configured annual quota requires data review; leave decisions are blocked');
+    const applied=await require('../utils/assignedLeavePolicy')(models,userId,type.id,t);
+    {
       const approved=await LeaveRequest.findAll({where:{userId,leaveTypeId:type.id,status:'approved',startDate:{[Op.gte]:year+'-01-01',[Op.lte]:year+'-12-31'}},attributes:['startDate','endDate','leaveMode','totalDays'],transaction:t});
       let used=0;
       for(const row of approved){
@@ -29,9 +31,9 @@ module.exports=models=>{
         if(!civil(start)||!civil(end)||start>end||!['full-day','half-day'].includes(mode)||mode==='half-day'&&start!==end||stored===null||!Number.isFinite(Number(stored))||Number(stored)<=0||Number(stored)!==units(start,end,mode))fail(409,'Historical approved request units require data review; quota cannot be determined safely');
         used+=Number(stored);
       }
-      if(used+total>Number(type.annual_quota))fail(409,'Existing quota check prevents this request; leave-year and charging rules require policy review');
+      if(used+total>applied.allowance)fail(409,'Existing quota check prevents this request; leave-year and charging rules require policy review');
     }
-    return year;
+    return {year,...applied};
   }
   const command=action=>async(req,res)=>{try{
     const id=action==='apply'?undefined:idFrom(req),input=normalize(req.body,req.user.id,action,id),commandKey=req.body.commandKey.toLowerCase(),payloadHash=crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -56,7 +58,7 @@ module.exports=models=>{
         if(action==='apply')record=await LeaveRequest.create({userId,leaveTypeId:input.leaveTypeId,startDate:start,endDate:end,leaveMode:mode,totalDays:total,reason:input.reason,status:'pending',version:1},{transaction:t});
       }
       if(action!=='apply')await record.update({status:action==='approve'?'approved':'rejected',approvedBy:actor.id,rejectionReason:action==='reject'?input.reason:null,version:record.version+1},{transaction:t});
-      const after=JSON.parse(JSON.stringify(record.toJSON())),details={reason:input.reason,before,after,actor:{id:actor.id,fullName:actor.fullName},leaveType:type?{id:type.id,name:type.name,is_paid:type.is_paid,annual_quota:type.annual_quota,max_consecutive_days:type.max_consecutive_days,half_day_allowed:type.half_day_allowed}:null,legacyQuotaYear:year,unitBasis:'existing-calendar-day-rule'};
+      const after=JSON.parse(JSON.stringify(record.toJSON())),details={reason:input.reason,before,after,actor:{id:actor.id,fullName:actor.fullName},leaveType:type?{id:type.id,name:type.name,is_paid:type.is_paid,annual_quota:type.annual_quota,max_consecutive_days:type.max_consecutive_days,half_day_allowed:type.half_day_allowed}:null,legacyQuotaYear:year?.year??null,appliedPolicy:year,unitBasis:'existing-calendar-day-rule'};
       await LeaveEvent.create({requestId:record.id,actorId:actor.id,userId,commandKey,payloadHash,version:record.version,action,details},{transaction:t});return{replayed:false,data:after,appliedVersion:record.version};
     });return res.status(action==='apply'&&!result.replayed?201:200).json({success:true,...result});
   }catch(e){return error(res,e);}};

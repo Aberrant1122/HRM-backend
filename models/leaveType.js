@@ -31,6 +31,7 @@ module.exports = (sequelize, DataTypes) => {
                 type: DataTypes.INTEGER,
                 allowNull: false,
                 defaultValue: 0,
+                validate: { validQuota(value) { if(!require('../utils/leaveQuota')(value)) throw Error('Annual quota must be a nonnegative integer; zero means unlimited'); } },
             },
             requires_approval: {
                 type: DataTypes.BOOLEAN,
