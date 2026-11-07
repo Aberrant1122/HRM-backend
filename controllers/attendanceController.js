@@ -107,16 +107,30 @@ const getAllUsersTodaysAttendance = async (req, res) => {
 };
 
 // --- Clock In ---
+// A stable parent lock serializes commands even when no attendance row exists yet.
+// Revalidate the authenticated account after waiting for a concurrent account edit.
+const lockClockAccount = async (user, transaction) => {
+  const account = await User.findByPk(user.id, {
+    transaction, lock: transaction.LOCK.UPDATE,
+  });
+  return account && account.status === "active" && account.role === user.role &&
+    Number(account.sessionVersion) === Number(user.sessionVersion ?? 0);
+};
+
 const clockIn = async (req, res) => {
   const transaction = await Attendance.sequelize.transaction();
   try {
     const userId = req.user.id;
+    if (!await lockClockAccount(req.user, transaction)) {
+      await transaction.rollback();
+      return res.status(401).json({ message: "Session revoked. Please sign in again." });
+    }
     const now = new Date();
     const today = formatDate(now);
 
     const existing = await Attendance.findOne({
       where: { userId, date: today },
-      transaction
+      transaction, lock: transaction.LOCK.UPDATE
     });
 
     if (existing) {
@@ -156,11 +170,21 @@ const clockOut = async (req, res) => {
   const transaction = await Attendance.sequelize.transaction();
   try {
     const userId = req.user.id;
+    if (!await lockClockAccount(req.user, transaction)) {
+      await transaction.rollback();
+      return res.status(401).json({ message: "Session revoked. Please sign in again." });
+    }
     const now = new Date();
     const today = formatDate(now);
 
     const { taskId, taskStatus, workNote, deliverableLink } = req.body;
     const numericTaskId = taskId ? Number(taskId) : null;
+    if (taskId !== undefined && taskId !== null && taskId !== "" &&
+        (!["string", "number"].includes(typeof taskId) ||
+         !/^[1-9]\d*$/.test(String(taskId)) || !Number.isSafeInteger(numericTaskId))) {
+      await transaction.rollback();
+      return res.status(400).json({ message: "Invalid task ID" });
+    }
 
     // Validate request data
     const validStatuses = ["planning", "in-progress", "testing", "blocked", "completed"];
@@ -169,10 +193,19 @@ const clockOut = async (req, res) => {
       return res.status(400).json({ message: "Invalid task status" });
     }
 
-    let attendance = await Attendance.findOne({
-      where: { userId, date: today, clockOut: null },
-      transaction
+    const records = await Attendance.findAll({
+      where: { userId, date: today },
+      transaction, lock: transaction.LOCK.UPDATE, limit: 2, order: [["id", "ASC"]]
     });
+    if (records.length > 1) {
+      await transaction.rollback();
+      return res.status(409).json({ message: "Conflicting attendance records for today. Contact an administrator." });
+    }
+    let attendance = records[0];
+    if (attendance?.clockOut) {
+      await transaction.rollback();
+      return res.status(409).json({ message: "Already clocked out for today" });
+    }
 
     if (!attendance) {
       attendance = await Attendance.create({
