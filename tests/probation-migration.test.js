@@ -1,9 +1,9 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),{Sequelize}=require('sequelize'),runFile=require('node:util').promisify(require('node:child_process').execFile);
 test('actual CLI fresh53 and populated52 upgrade record exact metadata without importing legacy probation',{timeout:180000},async()=>{
   assert.equal(process.env.HRM_DISPOSABLE_MYSQL,'1');assert.equal(process.env.HRM_TEST_MYSQL_PORT,'13379');
-  const opts={host:'127.0.0.1',port:13379,dialect:'mysql',logging:false},root=new Sequelize('mysql','root','',opts),schemas=['hrm_probation_upgrade_'+Date.now(),'hrm_probation_fresh_'+Date.now()],connections=[];let isolated;
+  const opts={host:'127.0.0.1',port:13379,dialect:'mysql',logging:false},root=new Sequelize('mysql','root','',opts),schemas=['hrm_probation_upgrade_'+Date.now(),'hrm_probation_fresh_'+Date.now()],connections=[];let isolated,frozen;
   try{
-    const source=path.join(__dirname,'../migrations'),names=fs.readdirSync(source).filter(n=>n.endsWith('.js')).sort(),target='20261107020000-manual-probation.js';assert.equal(names.length,53);isolated=require('./helpers/isolated-migrations')(source,names.filter(n=>n!==target));
+    const original=path.join(__dirname,'../migrations'),names=fs.readdirSync(original).filter(n=>n.endsWith('.js')&&n<='20261107020000-manual-probation.js').sort(),target='20261107020000-manual-probation.js';assert.equal(names.length,53);frozen=require('./helpers/isolated-migrations')(original,names);const source=frozen.directory;isolated=require('./helpers/isolated-migrations')(source,names.filter(n=>n!==target));
     const cli=require.resolve('sequelize-cli/lib/sequelize'),run=(schema,directory,command='db:migrate')=>runFile(process.execPath,[cli,command,'--env','test','--config',path.join(__dirname,'../config/config.js'),'--migrations-path',directory],{cwd:path.join(__dirname,'..'),env:{...process.env,NODE_ENV:'test',DATABASE_URL:'',DB_URL:'',TEST_DB_HOST:'127.0.0.1',TEST_DB_PORT:'13379',TEST_DB_NAME:schema,TEST_DB_USER:'root',TEST_DB_PASSWORD:''},timeout:60000,maxBuffer:2*1024*1024});
     for(const schema of schemas)await root.query('CREATE DATABASE `'+schema+'`');
     const old=new Sequelize(schemas[0],'root','',opts);connections.push(old);await run(schemas[0],isolated.directory);
@@ -15,5 +15,5 @@ test('actual CLI fresh53 and populated52 upgrade record exact metadata without i
     await run(schemas[0],source,'db:migrate:undo');assert.equal((await old.getQueryInterface().showAllTables()).includes('probation_cases'),false);await run(schemas[0],source);
     await old.query("INSERT INTO probation_cases(employeeId,createdBy,startDate,endDate,status,version,createdAt,updatedAt) SELECT id,id,'2026-11-01','2027-01-31','active',1,NOW(),NOW() FROM users");await assert.rejects(()=>run(schemas[0],source,'db:migrate:undo'),/populated probation/);const [[still]]=await old.query('SELECT COUNT(*) total FROM probation_cases');assert.equal(Number(still.total),1);
     await run(schemas[1],source);const fresh=new Sequelize(schemas[1],'root','',opts);connections.push(fresh);const [freshMeta]=await fresh.query('SELECT name FROM SequelizeMeta ORDER BY name');assert.deepEqual(freshMeta.map(r=>r.name),names);console.log('Synthetic schemas',...schemas,'actual CLI metadata53, populated52 upgrade, no-op, empty down and populated refusal verified');
-  }finally{if(isolated)isolated.close();for(const db of connections)await db.close();await root.close();}
+  }finally{if(isolated)isolated.close();if(frozen)frozen.close();for(const db of connections)await db.close();await root.close();}
 });

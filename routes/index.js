@@ -35,5 +35,6 @@ router.use("/project-communications", projectCommunicationRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/onboarding", require('./onboardingRoutes'));
 router.use("/probation", require('./probationRoutes'));
+router.use("/organization", require('./organizationRoutes'));
 
 module.exports = router;
