@@ -1,11 +1,13 @@
 const {test}=require('node:test'),assert=require('node:assert/strict'),path=require('node:path');const {Sequelize}=require('sequelize');const execute=require('node:util').promisify(require('node:child_process').execFile);
 test('actual CLI populated50-to51 correction upgrade preserves raw facts and additive down/re-up',{timeout:180000},async()=>{
   assert.equal(process.env.HRM_DISPOSABLE_MYSQL,'1');assert.equal(process.env.HRM_TEST_MYSQL_PORT,'13379');
-  const opts={host:'127.0.0.1',port:13379,dialect:'mysql',logging:false},admin=new Sequelize('mysql','root','',opts);let db;
+  const opts={host:'127.0.0.1',port:13379,dialect:'mysql',logging:false},admin=new Sequelize('mysql','root','',opts);let db,isolated;
   try{
     const schema='hrm_correction_upgrade_'+Date.now();await admin.query('CREATE DATABASE `'+schema+'`');db=new Sequelize(schema,'root','',opts);
+    const source=path.join(__dirname,'../migrations'),target='20261107010000-attendance-correction-drafts.js';
+    isolated=require('./helpers/isolated-migrations')(source,require('node:fs').readdirSync(source).filter(name=>name.endsWith('.js')&&name<=target&&name!=='20261106000000-manual-onboarding.js').sort());
     const env={...process.env,NODE_ENV:'test',DATABASE_URL:'',DB_URL:'',TEST_DB_HOST:'127.0.0.1',TEST_DB_PORT:'13379',TEST_DB_NAME:schema,TEST_DB_USER:'root',TEST_DB_PASSWORD:''},cli=require.resolve('sequelize-cli/lib/sequelize');
-    const run=(command='db:migrate',to)=>execute(process.execPath,[cli,command,'--env','test','--config',path.join(__dirname,'../config/config.js'),...(to?['--to',to]:[])],{cwd:path.join(__dirname,'..'),env,timeout:60000,maxBuffer:2*1024*1024});
+    const run=(command='db:migrate',to)=>execute(process.execPath,[cli,command,'--env','test','--config',path.join(__dirname,'../config/config.js'),'--migrations-path',isolated.directory,...(to?['--to',to]:[])],{cwd:path.join(__dirname,'..'),env,timeout:60000,maxBuffer:2*1024*1024});
     await run('db:migrate','20261107000000-attendance-command-recovery.js');
     await db.query("INSERT INTO users(fullName,email,role,status,createdAt,updatedAt) VALUES('Synthetic legacy correction','legacy-correction@example.invalid','employee','active',NOW(),NOW())");
     const [[user]]=await db.query("SELECT id FROM users WHERE email='legacy-correction@example.invalid'");
@@ -24,5 +26,5 @@ test('actual CLI populated50-to51 correction upgrade preserves raw facts and add
     await run();const [[count]]=await db.query('SELECT COUNT(*) AS n FROM attendances');assert.equal(Number(count.n),5);
     const [[unknown]]=await db.query('SELECT COUNT(*) AS n FROM attendances WHERE status IS NULL');assert.equal(Number(unknown.n),1);
     console.log('Synthetic correction upgrade',schema,'metadata51; legacy and nullable/status facts retained; grants default empty');
-  }finally{if(db)await db.close();await admin.close();}
+  }finally{if(isolated)isolated.close();if(db)await db.close();await admin.close();}
 });
