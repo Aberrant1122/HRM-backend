@@ -21,7 +21,16 @@ module.exports=models=>{
   async function quota(type,userId,total,t){
     // Preserve the existing rule for compatibility; this is not approval of a company leave-year policy.
     const year=new Date().getFullYear();
-    if(type.annual_quota>0){const used=Number(await LeaveRequest.sum('totalDays',{where:{userId,leaveTypeId:type.id,status:'approved',startDate:{[Op.gte]:year+'-01-01',[Op.lte]:year+'-12-31'}},transaction:t})||0);if(used+total>Number(type.annual_quota))fail(409,'Existing quota check prevents this request; leave-year and charging rules require policy review');}
+    if(type.annual_quota>0){
+      const approved=await LeaveRequest.findAll({where:{userId,leaveTypeId:type.id,status:'approved',startDate:{[Op.gte]:year+'-01-01',[Op.lte]:year+'-12-31'}},attributes:['startDate','endDate','leaveMode','totalDays'],transaction:t});
+      let used=0;
+      for(const row of approved){
+        const {startDate:start,endDate:end,leaveMode:mode,totalDays:stored}=row;
+        if(!civil(start)||!civil(end)||start>end||!['full-day','half-day'].includes(mode)||mode==='half-day'&&start!==end||stored===null||!Number.isFinite(Number(stored))||Number(stored)<=0||Number(stored)!==units(start,end,mode))fail(409,'Historical approved request units require data review; quota cannot be determined safely');
+        used+=Number(stored);
+      }
+      if(used+total>Number(type.annual_quota))fail(409,'Existing quota check prevents this request; leave-year and charging rules require policy review');
+    }
     return year;
   }
   const command=action=>async(req,res)=>{try{
