@@ -18,22 +18,13 @@ function normalize(body,actorId,action,id){
 module.exports=models=>{
   const {sequelize,User,LeaveRequest,LeaveType,LeaveEvent}=models;
   function error(res,e){if(Number.isInteger(e.code))return res.status(e.code).json({success:false,message:e.message});if(['SequelizeUniqueConstraintError','SequelizeForeignKeyConstraintError'].includes(e.name))return res.status(409).json({success:false,message:'Record changed or command key is bound to another request. Reload before continuing.'});console.error('Leave workflow failed');return res.status(500).json({success:false,message:'Leave workflow unavailable'});}
-  async function quota(type,userId,total,startDate,t){
-    // Cohort is the validated request start-date year, regardless of the server clock.
-    const year=Number(startDate.slice(0,4));
+  async function quota(type,userId,total,startDate,endDate,mode,t){
     if(!require('../utils/leaveQuota')(type.annual_quota))fail(409,'Configured annual quota requires data review; leave decisions are blocked');
-    const applied=await require('../utils/assignedLeavePolicy')(models,userId,type.id,t);
-    {
-      const approved=await LeaveRequest.findAll({where:{userId,leaveTypeId:type.id,status:'approved',startDate:{[Op.gte]:year+'-01-01',[Op.lte]:year+'-12-31'}},attributes:['startDate','endDate','leaveMode','totalDays'],transaction:t});
-      let used=0;
-      for(const row of approved){
-        const {startDate:start,endDate:end,leaveMode:mode,totalDays:stored}=row;
-        if(!civil(start)||!civil(end)||start>end||!['full-day','half-day'].includes(mode)||mode==='half-day'&&start!==end||stored===null||!Number.isFinite(Number(stored))||Number(stored)<=0||Number(stored)!==units(start,end,mode))fail(409,'Historical approved request units require data review; quota cannot be determined safely');
-        used+=Number(stored);
-      }
-      if(used+total>applied.allowance)fail(409,'Existing quota check prevents this request; leave-year and charging rules require policy review');
-    }
-    return {year,usageBasis:'request-start-date-year',...applied};
+    const applied=await require('../utils/assignedLeavePolicy')(models,userId,type.id,t),cycle=require('../utils/leaveYear'),periods=cycle.segments(startDate,endDate,mode,applied.rules),consumption=[];
+    for(const p of periods){const where={userId,leaveTypeId:type.id,status:'approved',...(applied.rules.crossYearRule==='start-period'?{startDate:{[Op.gte]:p.periodStart,[Op.lte]:p.periodEnd}}:{startDate:{[Op.lte]:p.periodEnd},endDate:{[Op.gte]:p.periodStart}})};const approved=await LeaveRequest.findAll({where,attributes:['startDate','endDate','leaveMode','totalDays'],transaction:t});let used=0;
+      for(const row of approved){const {startDate:start,endDate:end,leaveMode:priorMode,totalDays:stored}=row;if(!civil(start)||!civil(end)||start>end||!['full-day','half-day'].includes(priorMode)||priorMode==='half-day'&&start!==end||stored===null||!Number.isFinite(Number(stored))||Number(stored)<=0||Number(stored)!==units(start,end,priorMode))fail(409,'Historical approved request units require data review; quota cannot be determined safely');used+=cycle.contribution(row,p,applied.rules);}
+      if(used+p.units>applied.allowance)fail(409,'Assigned policy allowance is exceeded for period '+p.periodStart+' through '+p.periodEnd);consumption.push({...p,previouslyApprovedUnits:used});
+    }return{...applied,usageBasis:'hr-configured-leave-year',periods:consumption};
   }
   const command=action=>async(req,res)=>{try{
     const id=action==='apply'?undefined:idFrom(req),input=normalize(req.body,req.user.id,action,id),commandKey=req.body.commandKey.toLowerCase(),payloadHash=crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
@@ -54,7 +45,7 @@ module.exports=models=>{
         const total=units(start,end,mode);if(record&&(!Number.isFinite(Number(record.totalDays))||Number(record.totalDays)!==total))fail(409,'Stored request units require data review; they will not be recalculated silently');
         if(type.max_consecutive_days&&total>Number(type.max_consecutive_days))fail(409,'Request exceeds the configured consecutive-day limit');
         const overlapping=await LeaveRequest.findOne({where:{userId,status:{[Op.ne]:'rejected'},...(id&&{id:{[Op.ne]:id}}),startDate:{[Op.lte]:end},endDate:{[Op.gte]:start}},transaction:t});if(overlapping)fail(409,'Another non-rejected request overlaps these dates');
-        year=await quota(type,userId,total,start,t);
+        year=await quota(type,userId,total,start,end,mode,t);
         if(action==='apply')record=await LeaveRequest.create({userId,leaveTypeId:input.leaveTypeId,startDate:start,endDate:end,leaveMode:mode,totalDays:total,reason:input.reason,status:'pending',version:1},{transaction:t});
       }
       if(action!=='apply')await record.update({status:action==='approve'?'approved':'rejected',approvedBy:actor.id,rejectionReason:action==='reject'?input.reason:null,version:record.version+1},{transaction:t});
