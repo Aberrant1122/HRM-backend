@@ -475,7 +475,9 @@ const deleteClient = async (req, res) => {
     });
     return res.status(result.status).json(result.body);
   } catch (error) {
-    if(error.name==='SequelizeForeignKeyConstraintError')return res.status(409).json({message:'Linked history must be retained. Deactivate this account instead.'});
+    if (error.name === 'SequelizeForeignKeyConstraintError') {
+      return res.status(409).json({ message: 'Linked account history or responsibilities must be retained. Deactivate this account instead.' });
+    }
     console.error("Error in deleteClient:", error);
     return res.status(500).json({
       message: "Error deleting client",
