@@ -89,8 +89,10 @@ const opts={dialect:'mysql',host:'127.0.0.1',port:13379,logging:false};
     else{res.statusCode=404;res.end();}
   });
   await new Promise(resolve=>storage.listen(13382,'127.0.0.1',resolve));
-  const app=express();app.use(require('cors')({origin:'http://127.0.0.1:13380'}));app.use(express.json());
-  app.get('/__fixture',(_,res)=>res.json({schema,ids,storageWrites,objects:objects.size,socketUsers:[...io.sockets.sockets.values()].map(socket=>socket.data.userId)}));
+  const preflights=[];let commandRequests=0;
+  const app=express();app.use((req,res,next)=>{if(req.method==='OPTIONS')preflights.push({path:req.path,headers:req.headers['access-control-request-headers']||'',origin:req.headers.origin||''});if(req.method==='POST'&&req.path.startsWith('/api/attendance/clock-'))commandRequests++;next();});
+  app.use(require('cors')(require('../config/corsPolicy')({...process.env,FRONTEND_URL:'http://127.0.0.1:13380'})));app.use(express.json());
+  app.get('/__fixture',(_,res)=>res.json({schema,ids,storageWrites,objects:objects.size,preflights,commandRequests,socketUsers:[...io.sockets.sockets.values()].map(socket=>socket.data.userId)}));
   app.post('/__shutdown',(_,res)=>{res.on('finish',()=>setImmediate(close));res.sendStatus(200);});
   const {authenticate,isAdmin}=require('../middleware/authMiddleware');
   app.post('/__fixture/notify',authenticate,isAdmin,async(req,res)=>{
