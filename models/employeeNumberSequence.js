@@ -1,0 +1,1 @@
+module.exports=(sequelize,D)=>sequelize.define('EmployeeNumberSequence',{id:{type:D.INTEGER,primaryKey:true},nextNumber:{type:D.INTEGER,allowNull:false}},{tableName:'employee_number_sequence',timestamps:false});
