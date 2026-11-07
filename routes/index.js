@@ -34,5 +34,6 @@ router.use("/payroll", payrollRoutes);
 router.use("/project-communications", projectCommunicationRoutes);
 router.use("/dashboard", dashboardRoutes);
 router.use("/onboarding", require('./onboardingRoutes'));
+router.use("/probation", require('./probationRoutes'));
 
 module.exports = router;

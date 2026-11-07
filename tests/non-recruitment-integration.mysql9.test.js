@@ -2,10 +2,10 @@ const {test}=require('node:test'),assert=require('node:assert/strict'),fs=requir
 const {Sequelize,DataTypes,Op}=require('sequelize'),execute=require('node:util').promisify(require('node:child_process').execFile),{load,response}=require('./helpers/controller');
 test('combined52 upgrade adds backdated onboarding to populated51 attendance without losing either workflow',{timeout:180000},async()=>{
   assert.equal(process.env.HRM_DISPOSABLE_MYSQL,'1');assert.equal(process.env.HRM_TEST_MYSQL_PORT,'13379');
-  const opts={host:'127.0.0.1',port:13379,dialect:'mysql',logging:false,pool:{max:8}},adminDb=new Sequelize('mysql','root','',opts);let db,isolated;
+  const opts={host:'127.0.0.1',port:13379,dialect:'mysql',logging:false,pool:{max:8}},adminDb=new Sequelize('mysql','root','',opts);let db,isolated,combinedSource;
   try{
     const schema='hrm_combined52_'+Date.now();await adminDb.query('CREATE DATABASE `'+schema+'`');db=new Sequelize(schema,'root','',opts);
-    const source=path.join(__dirname,'../migrations'),names=fs.readdirSync(source).filter(n=>n.endsWith('.js')).sort(),onboarding='20261106000000-manual-onboarding.js';assert.equal(names.length,52);
+    const original=path.join(__dirname,'../migrations'),names=fs.readdirSync(original).filter(n=>n.endsWith('.js')&&n<='20261107010000-attendance-correction-drafts.js').sort(),onboarding='20261106000000-manual-onboarding.js';assert.equal(names.length,52);combinedSource=require('./helpers/isolated-migrations')(original,names);const source=combinedSource.directory;
     isolated=require('./helpers/isolated-migrations')(source,names.filter(n=>n!==onboarding));
     const cli=require.resolve('sequelize-cli/lib/sequelize'),env={...process.env,NODE_ENV:'test',DATABASE_URL:'',DB_URL:'',TEST_DB_HOST:'127.0.0.1',TEST_DB_PORT:'13379',TEST_DB_NAME:schema,TEST_DB_USER:'root',TEST_DB_PASSWORD:''};
     const run=(directory,database=schema)=>execute(process.execPath,[cli,'db:migrate','--env','test','--config',path.join(__dirname,'../config/config.js'),'--migrations-path',directory],{cwd:path.join(__dirname,'..'),env:{...env,TEST_DB_NAME:database},timeout:60000,maxBuffer:2*1024*1024});
@@ -41,5 +41,5 @@ test('combined52 upgrade adds backdated onboarding to populated51 attendance wit
     const freshName='hrm_combined52_fresh_'+Date.now();await adminDb.query('CREATE DATABASE `'+freshName+'`');const fresh=new Sequelize(freshName,'root','',opts);
     try{await run(source,freshName);const [freshMeta]=await fresh.query('SELECT name FROM SequelizeMeta ORDER BY name');assert.deepEqual(freshMeta.map(r=>r.name),names);assert.equal((await fresh.getQueryInterface().describeTable('attendances')).clockIn.allowNull,true);assert.equal((await fresh.getQueryInterface().describeTable('daily_work_records')).taskId.allowNull,true);const [[empty]]=await fresh.query('SELECT COUNT(*) AS n FROM attendance_correction_grants');assert.equal(Number(empty.n),0);}finally{await fresh.close();}
     console.log('Combined synthetic schemas',schema,freshName,'metadata52; fresh sorted install and populated51 upgrade preserved; backdated onboarding applied once; workflows/retention verified');
-  }finally{if(isolated)isolated.close();if(db)await db.close();await adminDb.close();}
+  }finally{if(isolated)isolated.close();if(combinedSource)combinedSource.close();if(db)await db.close();await adminDb.close();}
 });
