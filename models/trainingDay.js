@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('TrainingDay',{recordId:{type:D.INTEGER,allowNull:false},date:{type:D.DATEONLY,allowNull:false},status:{type:D.STRING(20),allowNull:false}},{tableName:'training_days'});
