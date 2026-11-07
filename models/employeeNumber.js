@@ -1,0 +1,1 @@
+module.exports=(sequelize,D)=>sequelize.define('EmployeeNumber',{userId:{type:D.INTEGER,allowNull:false,unique:true},actorId:{type:D.INTEGER,allowNull:false},number:{type:D.INTEGER,allowNull:false,unique:true},commandKey:{type:D.STRING(36),allowNull:false,unique:true},reason:{type:D.STRING(1000),allowNull:false}},{tableName:'employee_numbers'});

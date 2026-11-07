@@ -1,0 +1,16 @@
+const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
+module.exports=models=>{
+ const {sequelize,User,EmployeeNumber:NumberRow,EmployeeNumberSequence:Sequence}=models;
+ const id=req=>{if(!/^\d+$/.test(req.params.employeeId)||!Number.isSafeInteger(Number(req.params.employeeId))||Number(req.params.employeeId)<1)fail(400,'Valid account ID required');return Number(req.params.employeeId);};
+ const format=row=>row?{employeeId:'EMP-'+String(row.number).padStart(6,'0'),assignedAt:row.createdAt,actorId:row.actorId,reason:row.reason}:null;
+ const error=(res,e)=>res.status(Number.isInteger(e.code)?e.code:500).json({success:false,message:Number.isInteger(e.code)?e.message:'Employee numbering unavailable'});
+ async function read(req,res){try{const user=await User.findByPk(id(req),{attributes:['id','fullName','email','role','status']});if(!user)fail(404,'Account not found');return res.json({success:true,data:{user,assignment:format(await NumberRow.findOne({where:{userId:user.id}}))}});}catch(e){return error(res,e);}}
+ async function command(req,res){try{const target=id(req),b=req.body;if(!b||Object.keys(b).some(k=>!['commandKey','reason'].includes(k))||typeof b.commandKey!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(b.commandKey)||typeof b.reason!=='string'||!b.reason.trim()||b.reason.trim().length>1000)fail(400,'Command UUID and reason (1–1000 characters) required');
+ const key=b.commandKey.toLowerCase(),reason=b.reason.trim();const data=await sequelize.transaction({isolationLevel:'READ COMMITTED'},async t=>{
+  const users=new Map();for(const uid of [...new Set([req.user.id,target])].sort((a,b)=>a-b))users.set(uid,await User.findByPk(uid,{transaction:t,lock:t.LOCK.UPDATE}));const actor=users.get(req.user.id),user=users.get(target);if(!actor||actor.role!=='admin'||actor.status!=='active'||Number(actor.sessionVersion)!==Number(req.user.sessionVersion??0))fail(403,'Current administrator authorization required');if(!user)fail(404,'Account not found');
+  const sequence=await Sequence.findByPk(1,{transaction:t,lock:t.LOCK.UPDATE});if(!sequence)fail(409,'Number sequence requires review');const prior=await NumberRow.findOne({where:{commandKey:key},transaction:t});if(prior){if(prior.userId!==target||prior.actorId!==actor.id||prior.reason!==reason)fail(409,'Command key is bound to another assignment');return{assignment:format(prior),replayed:true};}
+  if(!['employee','manager','admin'].includes(user.role))fail(409,'Choose an internal account; client accounts are excluded');if(await NumberRow.findOne({where:{userId:target},transaction:t}))fail(409,'Employee ID is already assigned and retained');if(!Number.isSafeInteger(sequence.nextNumber)||sequence.nextNumber<1||sequence.nextNumber>=2147483647)fail(409,'Number sequence exhausted or requires review');
+  const row=await NumberRow.create({userId:target,actorId:actor.id,number:sequence.nextNumber,commandKey:key,reason},{transaction:t});await sequence.update({nextNumber:sequence.nextNumber+1},{transaction:t});return{assignment:format(row),replayed:false};
+ });return res.json({success:true,data});}catch(e){return error(res,e);}}
+ return{read,command};
+};
