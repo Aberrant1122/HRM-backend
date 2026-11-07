@@ -6,7 +6,9 @@ test('admin attendance reports deny employee/manager/client while self-service r
   const controller=new Proxy({}, {get:()=>handler});
   const router=load('routes/attendanceRoutes.js',{
     express,'../controllers/attendanceController':controller,'../middleware/authMiddleware':middleware,
-    '../middleware/upload':{uploadTaskDeliverables:{array:()=>(req,res,next)=>next()}},
+    '../middleware/attendanceMultipart':(req,res,next)=>next(),
+    '../models':{}, '../services/attendanceRecovery':()=>controller,
+    '../controllers/attendanceFacts':()=>new Proxy({}, {get:()=>handler}),
   });
   const app=express();app.use((req,res,next)=>{req.user={id:1,role:req.headers['x-synthetic-role']};next();});app.use(router);
   const server=await new Promise(resolve=>{const value=app.listen(0,'127.0.0.1',()=>resolve(value));});
