@@ -67,19 +67,32 @@ const opts={dialect:'mysql',host:'127.0.0.1',port:13379,logging:false};
     ]);
   }
   const objects=new Map();let storageWrites=0;
+  if(process.env.HRM_ATTENDANCE_FIXTURES==='1'){
+    const user=await models.User.create({fullName:'Synthetic Facts Employee',email:'facts@example.invalid',password:'Synthetic-local-123',role:'employee',status:'active'});
+    for(const status of ['present','leave'])await models.Attendance.create({userId:ids.employee,date:'2026-01-01',clockIn:'2026-01-01T08:00:00Z',status,totalHours:1.999});
+    await models.Attendance.create({userId:user.id,date:'2026-01-01',clockIn:'2026-01-01T08:00:00Z',status:'leave',totalHours:1.999});
+  }
   // Protocol sink exercises actual AWS SDK/Multer HTTP writes, not S3 IAM/signature enforcement.
   const storage=http.createServer(async(req,res)=>{
     const key=new URL(req.url,'http://127.0.0.1:13382').pathname;
     if(req.method==='PUT'){
       const chunks=[];for await(const chunk of req)chunks.push(chunk);
-      objects.set(key,Buffer.concat(chunks));storageWrites++;res.setHeader('ETag','"synthetic-etag"');res.end();
+      let body=Buffer.concat(chunks);
+      if(String(req.headers['content-encoding']||'').includes('aws-chunked')){
+        const decoded=[];let offset=0;
+        while(offset<body.length){const end=body.indexOf('\r\n',offset);const size=parseInt(body.subarray(offset,end).toString().split(';')[0],16);if(!size)break;offset=end+2;decoded.push(body.subarray(offset,offset+size));offset+=size+2;}
+        body=Buffer.concat(decoded);
+      }
+      objects.set(key,body);storageWrites++;res.setHeader('ETag','"synthetic-etag"');res.end();
     }else if(req.method==='GET'&&objects.has(key))res.end(objects.get(key));
     else if(req.method==='DELETE'){objects.delete(key);res.statusCode=204;res.end();}
     else{res.statusCode=404;res.end();}
   });
   await new Promise(resolve=>storage.listen(13382,'127.0.0.1',resolve));
-  const app=express();app.use(require('cors')({origin:'http://127.0.0.1:13380'}));app.use(express.json());
-  app.get('/__fixture',(_,res)=>res.json({schema,ids,storageWrites,objects:objects.size,socketUsers:[...io.sockets.sockets.values()].map(socket=>socket.data.userId)}));
+  const preflights=[];let commandRequests=0;
+  const app=express();app.use((req,res,next)=>{if(req.method==='OPTIONS')preflights.push({path:req.path,headers:req.headers['access-control-request-headers']||'',origin:req.headers.origin||''});if(req.method==='POST'&&req.path.startsWith('/api/attendance/clock-'))commandRequests++;next();});
+  app.use(require('cors')(require('../config/corsPolicy')({...process.env,FRONTEND_URL:'http://127.0.0.1:13380'})));app.use(express.json());
+  app.get('/__fixture',(_,res)=>res.json({schema,ids,storageWrites,objects:objects.size,preflights,commandRequests,socketUsers:[...io.sockets.sockets.values()].map(socket=>socket.data.userId)}));
   app.post('/__shutdown',(_,res)=>{res.on('finish',()=>setImmediate(close));res.sendStatus(200);});
   const {authenticate,isAdmin}=require('../middleware/authMiddleware');
   app.post('/__fixture/notify',authenticate,isAdmin,async(req,res)=>{
