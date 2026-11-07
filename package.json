@@ -20,7 +20,8 @@
     "test:realtime": "node --test tests/realtime-access.test.js",
     "test:history:mysql9": "node --test tests/employee-history.mysql9.test.js",
     "test:onboarding:mysql9": "node --test tests/onboarding.mysql9.test.js",
-    "test:cors": "node --test tests/cors-policy.test.js"
+    "test:cors": "node --test tests/cors-policy.test.js",
+    "test:probation:mysql9": "node --test --test-concurrency=1 tests/probation.mysql9.test.js tests/probation-migration.test.js"
   },
   "repository": {
     "type": "git",
