@@ -54,7 +54,7 @@ const createDepartment = async (req, res) => {
     const existingDepartment = allDepartments.find(
       dept => dept.name.toLowerCase() === trimmedName.toLowerCase()
     );
-    if (existingDepartment) return res.status(409).json({success:false,message:existingDepartment.isActive?'Department already exists':'Department name is retained by an archived category. Use Restore to reactivate it.'});
+    if (existingDepartment) return res.status(409).json({success:false,message:existingDepartment.isActive?'Department already exists':'Department name is retained by an archived category. Use Restore to reactivate it.',...(!existingDepartment.isActive&&{archivedDepartment:{id:existingDepartment.id,name:existingDepartment.name,description:existingDepartment.description}})});
 
     const department = await Department.create({
       name: trimmedName,
