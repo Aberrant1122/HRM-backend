@@ -1,0 +1,2 @@
+'use strict';
+module.exports={async up(q,S){await q.addColumn('policy_revisions','attachment',{type:S.JSON,allowNull:true});},async down(q){const [[r]]=await q.sequelize.query('SELECT COUNT(*) total FROM policy_revisions WHERE attachment IS NOT NULL');if(Number(r.total))throw Error('Refusing to remove retained handbook attachments; roll forward');await q.removeColumn('policy_revisions','attachment');}};
