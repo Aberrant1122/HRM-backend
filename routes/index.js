@@ -43,5 +43,6 @@ router.use("/offboarding", require('./offboardingRoutes'));
 router.use("/onboarding", require('./onboardingRoutes'));
 router.use("/probation", require('./probationRoutes'));
 router.use("/organization", require('./organizationRoutes'));
+router.use("/designations", require('./designationRoutes'));
 
 module.exports = router;
