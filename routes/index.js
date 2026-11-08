@@ -36,6 +36,7 @@ router.use("/dashboard", dashboardRoutes);
 router.use("/training", require('./trainingRoutes'));
 router.use("/policies", require('./policyRoutes'));
 router.use("/record-reports", require('./recordReportRoutes'));
+router.use("/hr-tasks", require('./hrTaskRoutes'));
 router.use("/performance", require('./performanceRoutes'));
 router.use("/offboarding", require('./offboardingRoutes'));
 router.use("/onboarding", require('./onboardingRoutes'));
