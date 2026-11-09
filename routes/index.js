@@ -46,6 +46,7 @@ router.use("/first-recorded-joiners", require('./firstRecordedJoinersRoutes'));
 router.use("/recorded-birthdays", require('./recordedBirthdaysRoutes'));
 router.use("/department-workforce", require('./departmentWorkforceRoutes'));
 router.use("/payroll-record-report", require('./payrollRecordReportRoutes'));
+router.use("/approved-leave-calendar", require('./approvedLeaveCalendarRoutes'));
 router.use("/population-review", require('./legacyPopulationRoutes'));
 router.use("/hr-tasks", require('./hrTaskRoutes'));
 router.use("/hr-letters", require('./hrLetterRoutes'));
