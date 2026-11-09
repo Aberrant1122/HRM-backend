@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-08",
+  "date": "2026-11-09",
   "sources": [
     {
       "basis": "Recorded endDate inclusively within explicit from/to dates, all recorded statuses. Status/start/evaluation/decision dates shown. No automatic upcoming cutoff or official confirmation.",
@@ -95,6 +95,26 @@
       "model": "hr_letter_drafts",
       "basis": "Current retained draft metadata with explicit documentDate inclusively in selected dates. Original template ID/version retained despite later template edit. Draft only; no issued/signed/delivered/pending-contract status or document content included.",
       "source": "letter-drafts"
+    },
+    {
+      "endpoint": "/onboarding-record-report?source=cases",
+      "requirements": [
+        "DOC-049",
+        "DOC-130"
+      ],
+      "source": "onboarding-cases",
+      "model": "onboarding_cases",
+      "basis": "Checklist records created in explicit UTC inclusive dates. Current case/status/version and all current child pending/completed/waived/undated/unassigned counts, regardless of child deadlines. Not employment joining or workforce membership."
+    },
+    {
+      "endpoint": "/onboarding-record-report?source=items",
+      "requirements": [
+        "DOC-049",
+        "DOC-130"
+      ],
+      "source": "onboarding-items",
+      "model": "onboarding_items",
+      "basis": "Current checklist items with recorded dueDate in inclusive civil dates/all statuses, independent of case creation cohort. Current account/case/responsible context; undated count global and separate. Not employee eligibility/access/pay/confirmation."
     }
   ],
   "unresolved": [
@@ -135,5 +155,5 @@
     }
   ],
   "context": "Current organization context at report generation for every row, never backcast to source dates. Missing assignment/department/category/evaluation-date counts describe only latest fetched page; row count disclosed. Not recorded remains explicit. Task decision context uses the assignee ID retained in that event; current account/organization names never overwrite recorded actor/title/status facts. Fresh per-request snapshots may change across later pages; not an immutable export.",
-  "scope": "Nine retained source projections only; independent QA pending. No workforce/lifecycle/financial/issued-document totals inferred. No permission grant changes."
+  "scope": "Nine record-hub projections plus two standalone onboarding source bases; independent QA pending. No workforce/lifecycle/financial/issued-document totals or permission mapping inferred."
 }
