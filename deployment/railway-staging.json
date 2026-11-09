@@ -1,0 +1,19 @@
+{
+  "$schema": "https://railway.app/railway.schema.json",
+  "build": {
+    "builder": "NIXPACKS",
+    "buildCommand": "npm ci --include=dev && npm run build"
+  },
+  "deploy": {
+    "preDeployCommand": [
+      "node scripts/preflightStagingDatabase.js && npx sequelize-cli db:migrate --env production --config ./config/config.js && node scripts/seedStagingSynthetic.js"
+    ],
+    "startCommand": "timeout 1800 node server.js",
+    "healthcheckPath": "/",
+    "healthcheckTimeout": 120,
+    "restartPolicyType": "NEVER",
+    "restartPolicyMaxRetries": 0,
+    "overlapSeconds": 0,
+    "drainingSeconds": 0
+  }
+}
