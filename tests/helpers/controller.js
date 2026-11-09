@@ -9,6 +9,13 @@ function load(file, dependencies, env = {}) {
     __filename: path.join(__dirname, '..', '..', file),
     require: name => {
       if (name in dependencies) return dependencies[name];
+      if (name === '../utils/employeeCohort') {
+        const user = dependencies['../models']?.User;
+        if (user?.rawAttributes && !Object.hasOwn(user.rawAttributes, 'retainedEmployeeMembership')) {
+          return { where: () => ({ role: 'employee' }), includes: u => u?.role === 'employee', basis: 'login-account-role' };
+        }
+        return require('../../utils/employeeCohort');
+      }
       throw new Error(`Unexpected dependency: ${name}`);
     },
     process: { env, argv: [] },

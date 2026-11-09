@@ -124,6 +124,7 @@ module.exports = (sequelize, DataTypes) => {
         defaultValue: 0,
       },
       hasEmployeeHistory: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      retainedEmployeeMembership: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       resetToken: {
         type: DataTypes.STRING,
         allowNull: true,

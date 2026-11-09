@@ -6,7 +6,7 @@
   "environmentId": "<NEW_EMPTY_STAGING_ENVIRONMENT_ID>",
   "forbiddenEnvironmentId": "87199464-2ada-411a-a6f3-592b9b488134",
   "costPolicy": "Existing plan only, no upgrade; on-demand QA; scale every staging compute service to zero afterward; measure actual usage and retained storage separately",
-  "sourceBranch": "codex/legacy-population-guards",
+  "sourceBranch": "codex/preserve-employee-hr-membership",
   "sourcePin": "Resolve exact paired remote commits/trees from published checkpoint into frozen session branches before connecting services; never main",
   "region": "asia-southeast1-eqsg3a",
   "services": {
@@ -62,3 +62,4 @@
   "unresolvedInputs":["New staging environment/service/volume/bucket IDs","Existing plan limits/baseline usage","Frozen session branch commits/image digest","Staging API/UI domains/CORS","Generated staging-only secret values, never print/commit","Private storage negative test/migration-trigger metadata proof","Named QA operator/shutdown owner"],
   "production":"No production variables/resources/source changes, plan upgrade, main merge or cutover"
 }
+

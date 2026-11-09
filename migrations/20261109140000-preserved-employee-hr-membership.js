@@ -1,0 +1,5 @@
+'use strict';
+module.exports={
+ async up(q,S){await q.addColumn('users','retainedEmployeeMembership',{type:S.BOOLEAN,allowNull:false,defaultValue:false});await q.sequelize.query("CREATE TRIGGER users_preserved_membership_revoke_sessions BEFORE UPDATE ON users FOR EACH ROW FOLLOWS users_revoke_sessions_before_update SET NEW.sessionVersion = CASE WHEN NOT (NEW.retainedEmployeeMembership <=> OLD.retainedEmployeeMembership) THEN GREATEST(NEW.sessionVersion,OLD.sessionVersion+1) ELSE NEW.sessionVersion END");},
+ async down(q){const [[r]]=await q.sequelize.query("SELECT (SELECT COUNT(*) FROM users WHERE retainedEmployeeMembership=1)+(SELECT COUNT(*) FROM hr_document_role_events WHERE JSON_EXTRACT(details,'$.membershipPreservation') IS NOT NULL) total");if(Number(r.total))throw Error('Refusing to remove preserved employee membership or its audit provenance; roll forward');await q.sequelize.query('DROP TRIGGER users_preserved_membership_revoke_sessions');await q.removeColumn('users','retainedEmployeeMembership');}
+};

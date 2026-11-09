@@ -21,7 +21,7 @@ test('account activity keeps explicit date, account scope and distinct record st
   assert.equal(res.body.data.date,'2024-02-29');assert.equal(res.body.data.scope.accountStatuses,'all');
   assert.equal(res.body.data.attendance.distinctAccountsByRecordedStatus.legacy,1);
   assert.equal(res.body.data.approvedLeaveAccounts,1);assert.equal(res.body.data.pendingLeaveRequests,4);
-  for(const options of calls){assert.equal(options.include[0].where.role,'employee');assert.equal(options.include[0].required,true);}
+  for(const options of calls){assert.deepEqual(options.include[0].where[require('sequelize').Op.or],[{role:'employee'},{role:'hr',retainedEmployeeMembership:true}]);assert.equal(options.include[0].required,true);}
   assert.equal(calls[2].where.startDate[Op.lte],'2024-02-29');assert.equal(calls[2].col,'userId');
   assert.equal(calls[3].where.startDate,undefined);
   fail=true;const failed=response();await controller.getAccountActivity({query:{date:'2026-01-01'}},failed);

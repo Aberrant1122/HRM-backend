@@ -21,3 +21,5 @@ Shutdown owner scales ALL THREE staging services in ALL configured regions to0, 
 Actual provisioning/session execution is not claimed. Missing inputs are in JSON. The connector exposed no environment-create action; use Railway empty-environment UI/approved CLI, not a production clone. No account-wide hard-limit change proposed because it could affect production. Confirm existing-plan/usage access and shutdown capability before starting compute.
 
 Open gates: real private bucket/alternate endpoint proof, actual backups/restore, legacy role=employee consumer selection, ambiguous client provenance, actual grant authority/recipients, attendance/payroll/lifecycle policy and reviewed production cutover. Staging evidence does not authorize production.
+
+Preservation candidate: verify all 71 canonical migrations and users_preserved_membership_revoke_sessions alongside original session triggers. Positive employee-to-HR membership, real payroll IDs and attendance/count invariance require QA. No automatic backfill or hosted provisioning.
