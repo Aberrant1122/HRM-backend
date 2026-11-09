@@ -55,15 +55,15 @@ const authorizeRole = (roles) => {
   };
 };
 
-// Middleware to check if user is an admin or HR
+// Payroll access remains admin-only until HR payroll policy is configured.
 const isPayrollAdmin = (req, res, next) => {
   const role = req.user?.role?.toLowerCase();
-  if (role === "admin" || role === "hr") {
+  if (role === "admin") {
     return next();
   }
   return res.status(403).json({
     success: false,
-    message: "Access denied: Admin or HR privileges required",
+    message: "Access denied: Admin privileges required",
   });
 };
 

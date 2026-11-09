@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('HrDocumentRoleEvent',{userId:{type:D.INTEGER,allowNull:false},actorId:{type:D.INTEGER,allowNull:false},version:{type:D.INTEGER,allowNull:false},commandKey:{type:D.STRING(36),allowNull:false,unique:true},payloadHash:{type:D.STRING(64),allowNull:false},details:{type:D.JSON,allowNull:false}},{tableName:'hr_document_role_events'});

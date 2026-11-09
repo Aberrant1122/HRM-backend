@@ -8,7 +8,7 @@ async function sessionFor(socket) {
   };
   let user;
   await authenticate(req, { status() { return this; }, json() {} }, () => { user = req.user; });
-  if (!user) throw new Error('Unauthorized socket session');
+  if (!user || user.role === 'hr') throw new Error('Unauthorized socket session');
   return user;
 }
 

@@ -518,6 +518,7 @@ const checkIsProjectManager = async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role?.toLowerCase?.() || req.user.role;
+    if (userRole === 'hr') return res.json({ success: true, isProjectManager: false, role: userRole, managedProject: null });
 
     // If user already has manager or admin role, return true
     if (userRole === "manager" || userRole === "admin") {
