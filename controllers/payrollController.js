@@ -16,21 +16,27 @@ if (!PayrollAdjustment) {
 }
 
 const createPayrollPeriod = async (req, res) => {
-    const transaction = await sequelize.transaction();
+    res.setHeader('Cache-Control','private, no-store');
+    const transaction = await sequelize.transaction({ isolationLevel: 'REPEATABLE READ' });
 
     try {
         const { name, startDate, endDate, payrollType } = req.body;
 
         // 1. Validate Input
         if (!name || !startDate || !endDate || !payrollType) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Please provide all required fields: name, startDate, endDate, payrollType",
             });
         }
 
+        // Refuse silent population divergence before creating any payroll rows.
+        const populationScope = await require('../services/legacyPopulationReview')(db).assertReconciled('payroll', { from: startDate, to: endDate, transaction, lock: true, actor: req.user });
+
         // 2. Check for overlapping payroll periods
         const overlappingPeriod = await PayrollPeriod.findOne({
+            transaction,
             where: {
                 [Op.or]: [
                     {
@@ -76,6 +82,7 @@ const createPayrollPeriod = async (req, res) => {
 
         // 4. Fetch all active employees
         const employees = await User.findAll({
+            transaction,
             where: {
                 role: "employee",
                 status: "active",
@@ -139,6 +146,7 @@ const createPayrollPeriod = async (req, res) => {
             data: {
                 payrollPeriod,
                 total_employees_processed: employeesWithProfile.length,
+                populationScope,
             },
         };
 
@@ -150,6 +158,7 @@ const createPayrollPeriod = async (req, res) => {
         return res.status(201).json(response);
     } catch (error) {
         if (transaction) await transaction.rollback();
+        if (error.status) return res.status(error.status).json({success:false,message:error.message,code:error.code,review:error.review});
         console.error("Error generating payroll period:", error);
         return res.status(500).json({
             success: false,

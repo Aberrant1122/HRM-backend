@@ -1267,6 +1267,7 @@ const updateEmployeeRole = async (req, res) => {
       if(!employee)throw Object.assign(Error('Employee not found'),{status:404});
       if(employee.role==='hr')throw Object.assign(Error('Use the audited HR document role workflow to change an HR role'),{status:409});
       const oldRole=employee.role;
+      if(oldRole!==role&&(oldRole==='employee'||role==='employee'))throw Object.assign(Error('Role changes crossing the legacy employee cohort are blocked until payroll/attendance populations are reconciled'),{status:409});
       await employee.update({role},{transaction});
       return {employee,oldRole};
     });

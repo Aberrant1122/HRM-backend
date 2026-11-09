@@ -43,6 +43,7 @@ router.use("/onboarding-record-report", require('./onboardingReportRoutes'));
 router.use("/offboarding-record-report", require('./offboardingReportRoutes'));
 router.use("/leave-request-report", require('./leaveRequestReportRoutes'));
 router.use("/first-recorded-joiners", require('./firstRecordedJoinersRoutes'));
+router.use("/population-review", require('./legacyPopulationRoutes'));
 router.use("/hr-tasks", require('./hrTaskRoutes'));
 router.use("/hr-letters", require('./hrLetterRoutes'));
 router.use("/performance", require('./performanceRoutes'));
