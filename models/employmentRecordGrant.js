@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('EmploymentRecordGrant',{userId:{type:D.INTEGER,allowNull:false},employeeId:{type:D.INTEGER,allowNull:false},active:{type:D.BOOLEAN,allowNull:false},version:{type:D.INTEGER,allowNull:false},grantedBy:{type:D.INTEGER,allowNull:false}},{tableName:'employment_record_grants',indexes:[{unique:true,fields:['userId','employeeId']}]});
