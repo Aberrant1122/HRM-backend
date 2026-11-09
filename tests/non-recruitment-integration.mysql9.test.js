@@ -10,7 +10,7 @@ test('combined52 upgrade adds backdated onboarding to populated51 attendance wit
     const cli=require.resolve('sequelize-cli/lib/sequelize'),env={...process.env,NODE_ENV:'test',DATABASE_URL:'',DB_URL:'',TEST_DB_HOST:'127.0.0.1',TEST_DB_PORT:'13379',TEST_DB_NAME:schema,TEST_DB_USER:'root',TEST_DB_PASSWORD:''};
     const run=(directory,database=schema)=>execute(process.execPath,[cli,'db:migrate','--env','test','--config',path.join(__dirname,'../config/config.js'),'--migrations-path',directory],{cwd:path.join(__dirname,'..'),env:{...env,TEST_DB_NAME:database},timeout:60000,maxBuffer:2*1024*1024});
     await run(isolated.directory);const models={sequelize:db};
-    for(const filename of fs.readdirSync(path.join(__dirname,'../models')).filter(n=>n.endsWith('.js')&&n!=='index.js')){const model=require('../models/'+filename)(db,DataTypes);models[model.name]=model;}
+    for(const filename of fs.readdirSync(path.join(__dirname,'../models')).filter(n=>n.endsWith('.js')&&n!=='index.js')){const model=(filename==='user'?require('./helpers/pre-preservation-user'):require('../models/'+filename))(db,DataTypes);models[model.name]=model;}
     const {User,UserInfo,Attendance,AttendanceCorrectionGrant:Grant,AttendanceCorrectionGrantEvent:GrantEvent}=models;
     const actors={};for(const role of ['admin','manager','employee','client']){const user=await User.create({fullName:'Synthetic integrated '+role,email:role+'-integrated@example.invalid',role,status:'active'});actors[role]={id:user.id,role,sessionVersion:0};}
     await UserInfo.create({userId:actors.employee.id,salary:1234,department:'development',position:'Synthetic retained position'});

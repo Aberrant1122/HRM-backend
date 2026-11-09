@@ -29,7 +29,7 @@ module.exports = ({ sequelize: db, Attendance, User }) => {
     if (Object.keys(req.query).some(k => k !== 'date')) invalid();
     const date = selected(req.query);
     const populationScope = await require('../services/legacyPopulationReview')({sequelize:db}).assertReconciled('attendance',{from:date,to:date,transaction});
-    const users = await User.findAll({ where: { role: 'employee' }, attributes: ['id', 'fullName', 'email'], order: [['id', 'ASC']], transaction });
+    const users = await User.findAll({ where: require('../utils/employeeCohort').where(), attributes: ['id', 'fullName', 'email'], order: [['id', 'ASC']], transaction });
     const rows = await Attendance.findAll({ where: { date }, order: [['id', 'ASC']], transaction });
     const map = new Map(); for (const row of rows) { if (!map.has(row.userId)) map.set(row.userId, []); map.get(row.userId).push(row); }
     return { success: true, date, count: users.length, populationScope, data: users.map(user => ({ ...fact(date, map.get(user.id) || []), userId: user.id, fullName: user.fullName, email: user.email })) };

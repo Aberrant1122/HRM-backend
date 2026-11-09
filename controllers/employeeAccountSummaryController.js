@@ -5,7 +5,7 @@ const getEmployeeAccountSummary = async (req, res) => {
   res.setHeader('Cache-Control', 'private, no-store');
   try {
     const [groups, activeConfigurations] = await Promise.all([
-      User.count({ where: { role: 'employee' }, group: ['status'] }),
+      User.count({ where: require('../utils/employeeCohort').where(), group: ['status'] }),
       Department.count({ where: { isActive: true } }),
     ]);
     const counts = { total: 0, active: 0, inactive: 0, suspended: 0, unknown: 0 };
@@ -19,7 +19,7 @@ const getEmployeeAccountSummary = async (req, res) => {
     return res.json({
       success: true,
       data: {
-        scope: { role: 'employee', filters: 'none', pagination: 'all-pages', basis: 'login-account-role' },
+        scope: { role: 'employee', preservedHrMembership: true, filters: 'none', pagination: 'all-pages', basis: require('../utils/employeeCohort').basis },
         counts,
         departments: { activeConfigurations },
         generatedAt: new Date().toISOString(),

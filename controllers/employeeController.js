@@ -14,7 +14,7 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
 
     const queryOptions = {
       where: {
-        role: "employee",
+        [Op.and]: [require('../utils/employeeCohort').where()],
         ...(status && { status }),
       },
       include: [],
@@ -73,7 +73,7 @@ const getAllEmployeesWithUserInfo = async (req, res) => {
         totalPages: paginatedData.totalPages,
         currentPage: paginatedData.currentPage,
       },
-      meta: { includeUserInfo, scope: 'employee-role-accounts', filters: { search, status: status || null, department: department || null } },
+      meta: { includeUserInfo, scope: 'employee-and-preserved-HR-accounts', filters: { search, status: status || null, department: department || null } },
     });
   } catch (error) {
     console.error("Error fetching employees:", error);

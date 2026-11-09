@@ -84,7 +84,7 @@ const createPayrollPeriod = async (req, res) => {
         const employees = await User.findAll({
             transaction,
             where: {
-                role: "employee",
+                ...require('../utils/employeeCohort').where(),
                 status: "active",
             },
             include: [

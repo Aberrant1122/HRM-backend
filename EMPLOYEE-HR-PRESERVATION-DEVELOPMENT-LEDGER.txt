@@ -1,0 +1,6 @@
+2026-11-09 Employee-to-HR membership preservation development candidate
+Confirmed: separate explicit attendance and payroll eligibility rules remain independent of login role. Employee-to-HR conversion while employed preserves prior cohort membership; other eligibility rules remain unchanged.
+Migration71 adds durable audited membership, no backfill; new session trigger invalidates marker-only changes without replacing existing triggers. Explicit covering employment reference required. Historical restoration requires retained employee-to-HR audit provenance. No unrelated HR enrollment, grants or production actions.
+Payroll generation, missing-profile roster, attendance directory, employee directory, activity and dashboard counts share current database membership. Existing status/profile/date/access rules remain. Actual created payroll employee IDs verified before/after conversion; issued facts unchanged.
+Evidence: SQL24pass, comparison8pass, unit24pass, production UI browser1pass including lost-response recovery and actual payroll creation; production build passed with inherited warnings. Historical frozen-schema fixture adaptations are test-only.
+Independent exact-tree QA pending. Broader eligibility, legacy reconciliation, real grants and rollout remain open. Staging preparation only; no hosted resources started.

@@ -13,7 +13,7 @@ test('populated attendance recovery upgrade via actual CLI metadata and no-op re
     isolated=require('./helpers/isolated-migrations')(path.join(__dirname,'../migrations'),[...names,target]);
     for(const name of names)await require('../migrations/'+name).up(qi,Sequelize);
     await qi.createTable('SequelizeMeta',{name:{type:DataTypes.STRING,primaryKey:true,allowNull:false}});await qi.bulkInsert('SequelizeMeta',names.map(name=>({name})));
-    const User=require('../models/user')(db,DataTypes), Attendance=require('../models/attendance')(db,DataTypes);
+    const User=require('./helpers/pre-preservation-user')(db,DataTypes), Attendance=require('../models/attendance')(db,DataTypes);
     const user=await User.create({fullName:'Synthetic upgrade',email:'upgrade@example.invalid',role:'employee',status:'active'});
     const old=await Attendance.create({userId:user.id,date:'2026-01-01',clockIn:'2026-01-01T08:00:00Z',status:'leave'});
     const Project=require('../models/project')(db,DataTypes),Task=require('../models/tasks')(db,DataTypes),Work=require('../models/dailyWorkRecord')(db,DataTypes);

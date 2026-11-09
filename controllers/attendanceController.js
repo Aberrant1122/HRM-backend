@@ -58,7 +58,7 @@ const getAllUsersTodaysAttendance = async (req, res) => {
     // Get all employees and their attendance in one query if possible, 
     // but for now keeping the logic but removing the autoMark call
     const allUsers = await User.findAll({
-      where: { role: 'employee' },
+      where: require('../utils/employeeCohort').where(),
       attributes: ['id', 'fullName', 'email'],
       raw: true
     });

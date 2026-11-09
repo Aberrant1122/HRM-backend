@@ -9,7 +9,7 @@ exports.getAccountActivity = async (req, res) => {
     return res.status(400).json({ success: false, message: 'date must be a valid YYYY-MM-DD calendar date' });
   }
   res.setHeader('Cache-Control', 'private, no-store');
-  const include = [{ model: User, as: 'user', attributes: [], required: true, where: { role: 'employee' } }];
+  const include = [{ model: User, as: 'user', attributes: [], required: true, where: require('../utils/employeeCohort').where() }];
   try {
     const [attendanceAccounts, statuses, approvedLeaveAccounts, pendingLeaveRequests] = await Promise.all([
       Attendance.count({ where: { date }, include, distinct: true, col: 'userId' }),
@@ -25,7 +25,7 @@ exports.getAccountActivity = async (req, res) => {
     }
     return res.json({ success: true, data: {
       date,
-      scope: { role: 'employee', accountStatuses: 'all', basis: 'login-account-role', dateBasis: 'stored-calendar-date' },
+      scope: { role: 'employee', preservedHrMembership: true, accountStatuses: 'all', basis: require('../utils/employeeCohort').basis, dateBasis: 'stored-calendar-date' },
       attendance: { accountsWithRecords: attendanceAccounts, distinctAccountsByRecordedStatus: recordedStatuses },
       approvedLeaveAccounts, pendingLeaveRequests,
     } });

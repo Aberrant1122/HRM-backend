@@ -35,7 +35,7 @@ exports.getEmployeesWithoutProfiles = async (req, res) => {
         const db=require('../models'),day=new Date().toISOString().slice(0,10);
         const result=await db.sequelize.transaction({isolationLevel:'REPEATABLE READ'},async transaction=>{
             const populationScope=await require('../services/legacyPopulationReview')(db).assertReconciled('profiles',{from:day,to:day,transaction,actor:req.user});
-            const employees=await User.findAll({where:{role:'employee',status:'active'},include:[{model:PayrollProfile,as:'payrollProfile',required:false},{model:UserInfo,as:'userInfo',attributes:['salary']}],transaction});
+            const employees=await User.findAll({where:{...require('../utils/employeeCohort').where(),status:'active'},include:[{model:PayrollProfile,as:'payrollProfile',required:false},{model:UserInfo,as:'userInfo',attributes:['salary']}],transaction});
             return{populationScope,data:employees.filter(emp=>!emp.payrollProfile).map(emp=>({id:emp.id,fullName:emp.fullName,email:emp.email,role:emp.role,status:emp.status,salary:emp.userInfo?.salary||0}))};
         });
         return res.json({success:true,...result});
