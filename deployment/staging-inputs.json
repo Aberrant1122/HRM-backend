@@ -1,65 +1,141 @@
 {
-  "status": "Prepared inputs only; no hosted resources provisioned or deployment triggered",
+  "status": "Verified empty target; configuration preparation only; compute OFF pending plan headroom and pre-DDL source QA",
   "projectId": "d3d9642a-87b1-4fcb-b2ac-6b619ea0ca1d",
   "projectName": "Hr-CRM",
-  "environmentName": "staging-qa",
-  "environmentId": "<NEW_EMPTY_STAGING_ENVIRONMENT_ID>",
+  "environmentName": "staging",
+  "environmentId": "a5da396f-dbdb-4a27-9611-dc4b45acb03d",
   "forbiddenEnvironmentId": "87199464-2ada-411a-a6f3-592b9b488134",
   "costPolicy": "Existing plan only, no upgrade; on-demand QA; scale every staging compute service to zero afterward; measure actual usage and retained storage separately",
-  "sourceBranch": "codex/preserve-employee-hr-membership",
-  "sourcePin": "Resolve exact paired remote commits/trees from published checkpoint into frozen session branches before connecting services; never main",
+  "sourceBranch": "codex/staging-pre-ddl-identity",
+  "sourcePin": "Preservation38/35 remains frozen; pre-DDL guard candidate requires independent source QA and explicit reviewed repin before hosting. Never deploy old validation-only migration chain.",
   "region": "asia-southeast1-eqsg3a",
   "services": {
     "mysql-staging": {
       "image": "mysql:9.5.0",
       "digest": "<VERIFY_CURRENT_OFFICIAL_IMAGE_DIGEST_AT_PROVISIONING>",
-      "startCommand": "mysqld --mysqlx=OFF --disable-log-bin --innodb-buffer-pool-size=128M --max-connections=30",
+      "startCommand": "mysqld --mysqlx=OFF --disable-log-bin --partial-revokes=ON --innodb-buffer-pool-size=128M --max-connections=30",
       "volume": "NEW staging-only volume at /var/lib/mysql; smallest supported size, no production volume/snapshot clone",
       "publicTcpProxy": false,
-      "variables": {"MYSQL_DATABASE":"hrm_staging_synthetic","MYSQL_USER":"hrm_staging","MYSQL_PASSWORD":"<NEW_STAGING_DB_SECRET>","MYSQL_ROOT_PASSWORD":"<NEW_STAGING_ROOT_SECRET>"}
+      "variables": {
+        "MYSQL_DATABASE": "hrm_staging_synthetic",
+        "MYSQL_USER": "hrm_staging",
+        "MYSQL_PASSWORD": "<NEW_STAGING_DB_SECRET>",
+        "MYSQL_ROOT_PASSWORD": "<NEW_STAGING_ROOT_SECRET>"
+      }
     },
     "api-staging": {
       "repo": "Aberrant1122/HRM-backend",
       "runtime": "Node20; verify supported provider selection and resolved version; locally verified20.18.1",
       "buildCommand": "npm ci --include=dev && npm run build",
-      "firstDeployPreDeployCommand": "node scripts/seedStagingSynthetic.js --validate-only && npx sequelize-cli db:migrate --env production --config ./config/config.js && node scripts/seedStagingSynthetic.js",
-      "subsequentPreDeployCommand": "node scripts/seedStagingSynthetic.js --validate-only && npx sequelize-cli db:migrate --env production --config ./config/config.js",
+      "firstDeployPreDeployCommand": "node scripts/preflightStagingDatabase.js && npx sequelize-cli db:migrate --env production --config ./config/config.js && node scripts/seedStagingSynthetic.js",
+      "subsequentPreDeployCommand": "node scripts/preflightStagingDatabase.js && npx sequelize-cli db:migrate --env production --config ./config/config.js",
       "startCommand": "node server.js",
       "healthcheckPath": "/",
       "healthcheckTimeoutSeconds": 120,
       "variables": {
-        "NODE_ENV":"production","APP_ENV":"staging","MAIL_MODE":"capture","BACKGROUND_JOBS_ENABLED":"false","STARTUP_SCHEMA_REPAIR_ENABLED":"false",
-        "DATABASE_URL":"mysql://hrm_staging:<STAGING_DB_PASSWORD>@<STAGING_DB_PRIVATE_HOST>:3306/hrm_staging_synthetic","DB_URL":"<UNSET>","DB_SSL":"false",
-        "JWT_SECRET_KEY":"<NEW_STAGING_SECRET_32PLUS_CHARS>","JWT_SECRET":"<UNSET>",
-        "FRONTEND_URL":"https://<STAGING_UI_DOMAIN>","APP_URL":"https://<STAGING_UI_DOMAIN>","API_URL":"https://<STAGING_API_DOMAIN>",
-        "EMAIL_USER":"<UNSET>","EMAIL_PASS":"<UNSET>","STAGING_SEED_CONFIRM":"synthetic-only",
-        "STAGING_EXPECTED_ENVIRONMENT_ID":"<NEW_EMPTY_STAGING_ENVIRONMENT_ID>","STAGING_EXPECTED_DB_NAME":"hrm_staging_synthetic","STAGING_EXPECTED_DB_HOST":"<STAGING_DB_PRIVATE_HOST>",
-        "STAGING_SEED_NAMESPACE":"hrm-qa","STAGING_QA_PASSWORD":"<NEW_QA_SECRET_24PLUS_CHARS_BACKEND_ONLY>",
-        "AWS_S3_BUCKET":"<NEW_STAGING_BUCKET_BUCKET_VARIABLE>","AWS_S3_ENDPOINT":"<NEW_STAGING_BUCKET_ENDPOINT>","AWS_REGION":"<NEW_STAGING_BUCKET_REGION>",
-        "AWS_ACCESS_KEY_ID":"<NEW_BUCKET_ACCESS_KEY_SECRET_REFERENCE>","AWS_SECRET_ACCESS_KEY":"<NEW_BUCKET_SECRET_KEY_REFERENCE>","AWS_S3_FORCE_PATH_STYLE":"false"
+        "NODE_ENV": "production",
+        "APP_ENV": "staging",
+        "MAIL_MODE": "capture",
+        "BACKGROUND_JOBS_ENABLED": "false",
+        "STARTUP_SCHEMA_REPAIR_ENABLED": "false",
+        "DATABASE_URL": "mysql://hrm_staging:<STAGING_DB_PASSWORD>@<STAGING_DB_PRIVATE_HOST>:3306/hrm_staging_synthetic",
+        "DB_URL": "<UNSET>",
+        "DB_SSL": "false",
+        "JWT_SECRET_KEY": "<NEW_STAGING_SECRET_32PLUS_CHARS>",
+        "JWT_SECRET": "<UNSET>",
+        "FRONTEND_URL": "https://<STAGING_UI_DOMAIN>",
+        "APP_URL": "https://<STAGING_UI_DOMAIN>",
+        "API_URL": "https://<STAGING_API_DOMAIN>",
+        "EMAIL_USER": "<UNSET>",
+        "EMAIL_PASS": "<UNSET>",
+        "STAGING_SEED_CONFIRM": "synthetic-only",
+        "STAGING_EXPECTED_ENVIRONMENT_ID": "a5da396f-dbdb-4a27-9611-dc4b45acb03d",
+        "STAGING_EXPECTED_DB_NAME": "hrm_staging_synthetic",
+        "STAGING_EXPECTED_DB_HOST": "<STAGING_DB_PRIVATE_HOST>",
+        "STAGING_SEED_NAMESPACE": "hrm-qa",
+        "STAGING_QA_PASSWORD": "<NEW_QA_SECRET_24PLUS_CHARS_BACKEND_ONLY>",
+        "AWS_S3_BUCKET": "<NEW_STAGING_BUCKET_BUCKET_VARIABLE>",
+        "AWS_S3_ENDPOINT": "<NEW_STAGING_BUCKET_ENDPOINT>",
+        "AWS_REGION": "<NEW_STAGING_BUCKET_REGION>",
+        "AWS_ACCESS_KEY_ID": "<NEW_BUCKET_ACCESS_KEY_SECRET_REFERENCE>",
+        "AWS_SECRET_ACCESS_KEY": "<NEW_BUCKET_SECRET_KEY_REFERENCE>",
+        "AWS_S3_FORCE_PATH_STYLE": "false",
+        "STAGING_EXPECTED_DB_SERVER_UUID": "<PIN_FROM_CONFIRMED_NEW_STAGING_DB_SERVICE_AND_VOLUME_BEFORE_DDL>"
       }
     },
     "ui-staging": {
-      "repo":"Aberrant1122/HRM-frontend","runtime":"Node20 matching API selection","buildCommand":"npm ci --include=dev && npm run build","startCommand":"npm run start",
-      "healthcheckPath":"/login","healthcheckTimeoutSeconds":120,
-      "variables":{"NODE_ENV":"production","NEXT_PUBLIC_BACKEND_URL":"https://<STAGING_API_DOMAIN>/api/","NEXT_PUBLIC_API_URL":"https://<STAGING_API_DOMAIN>","NEXT_PUBLIC_APP_URL":"https://<STAGING_UI_DOMAIN>"}
+      "repo": "Aberrant1122/HRM-frontend",
+      "runtime": "Node20 matching API selection",
+      "buildCommand": "npm ci --include=dev && npm run build",
+      "startCommand": "npm run start",
+      "healthcheckPath": "/login",
+      "healthcheckTimeoutSeconds": 120,
+      "variables": {
+        "NODE_ENV": "production",
+        "NEXT_PUBLIC_BACKEND_URL": "https://<STAGING_API_DOMAIN>/api/",
+        "NEXT_PUBLIC_API_URL": "https://<STAGING_API_DOMAIN>",
+        "NEXT_PUBLIC_APP_URL": "https://<STAGING_UI_DOMAIN>"
+      }
     }
   },
   "storage": {
-    "name":"hrm-qa-private","environment":"staging-qa only, new bucket instance/credentials",
-    "scope":"Synthetic handbook/employee-document PDFs only; no production objects, credentials or signed/public URLs",
-    "verification":"Match returned credential URL style; new Railway buckets virtual-hosted; anonymous GET must fail, authenticated API exact-byte download must succeed"
+    "name": "hrm-qa-private",
+    "environment": "staging a5da396f-dbdb-4a27-9611-dc4b45acb03d only; new bucket instance/credentials",
+    "scope": "Synthetic handbook/employee-document PDFs only; no production objects, credentials or signed/public URLs",
+    "verification": "Match returned credential URL style; new Railway buckets virtual-hosted; anonymous GET must fail, authenticated API exact-byte download must succeed"
   },
   "session": {
-    "replicasWhileTesting":1,"replicasAfterTesting":0,"maxSessionMinutes":60,
-    "maxSessionMeaning":"Operator target, not automatic billing cap or scheduled automation",
-    "proposedRuntimeCaps":{"mysqlMemoryGB":1,"apiMemoryGB":0.5,"uiMemoryGB":0.5,"mysqlVcpu":0.5,"apiVcpu":0.25,"uiVcpu":0.25},
-    "capsMeaning":"Verify existing-plan limits before applying; no plan upgrade or silent cap increase",
-    "bootstrapAccounts":["admin.hrm-qa@example.invalid","employee.hrm-qa@example.invalid","manager.hrm-qa@example.invalid","client.hrm-qa@example.invalid","hr.hrm-qa@example.invalid"],
-    "bootstrapGrants":0,"server":"server.js only, never local-acceptance-server or public fixture/shutdown endpoints",
-    "usageEvidence":"Record resource IDs, commits, start/end UTC/local times, baseline/end/post-settlement usage, replica0 status and retained volume/bucket bytes; no hosted usage measured yet"
+    "replicasWhileTesting": 1,
+    "replicasAfterTesting": 0,
+    "maxSessionMinutes": 60,
+    "maxSessionMeaning": "Operator target, not automatic billing cap or scheduled automation",
+    "proposedRuntimeCaps": {
+      "mysqlMemoryGB": 1,
+      "apiMemoryGB": 0.5,
+      "uiMemoryGB": 0.5,
+      "mysqlVcpu": 0.5,
+      "apiVcpu": 0.25,
+      "uiVcpu": 0.25
+    },
+    "capsMeaning": "Verify existing-plan limits before applying; no plan upgrade or silent cap increase",
+    "bootstrapAccounts": [
+      "admin.hrm-qa@example.invalid",
+      "employee.hrm-qa@example.invalid",
+      "manager.hrm-qa@example.invalid",
+      "client.hrm-qa@example.invalid",
+      "hr.hrm-qa@example.invalid"
+    ],
+    "bootstrapGrants": 0,
+    "server": "server.js only, never local-acceptance-server or public fixture/shutdown endpoints",
+    "usageEvidence": "Record resource IDs, commits, start/end UTC/local times, baseline/end/post-settlement usage, replica0 status and retained volume/bucket bytes; no hosted usage measured yet",
+    "shutdownOwner": "Current build manager owns staging UI/API/DB all-region replica0 verification and evidence; fallback operator must be identified before compute starts",
+    "computeState": "OFF; no service, volume, bucket, variable or source created"
   },
-  "unresolvedInputs":["New staging environment/service/volume/bucket IDs","Existing plan limits/baseline usage","Frozen session branch commits/image digest","Staging API/UI domains/CORS","Generated staging-only secret values, never print/commit","Private storage negative test/migration-trigger metadata proof","Named QA operator/shutdown owner"],
-  "production":"No production variables/resources/source changes, plan upgrade, main merge or cutover"
+  "unresolvedInputs": [
+    "Existing-plan headroom/usage baseline (compute OFF until confirmed)",
+    "New staging-only service/volume/bucket IDs and independently bound DB server UUID",
+    "MySQL image digest/provider runtime verification",
+    "Staging API/UI origins/CORS",
+    "Generate unique staging-only secrets in Railway variables; no production/shared inheritance",
+    "Private storage negative tests/backups/metadata/trigger evidence",
+    "Confirmed all-region shutdown permissions and fallback operator",
+    "Independent QA of pre-DDL guard and explicit exact-source repin"
+  ],
+  "production": "No production variables/resources/source changes, plan upgrade, main merge or cutover",
+  "planHeadroom": {
+    "confirmed": false,
+    "state": "Operator confirmation of existing-plan headroom/usage visibility still required; no upgrade and no compute start"
+  },
+  "nextAction": {
+    "state": "Preparation only",
+    "step": "Review exact target/configuration and pre-DDL guard; confirm plan headroom/usage baseline and shutdown fallback before creating compute/storage",
+    "noProductionClone": true,
+    "noPlanUpgrade": true
+  },
+  "actualHostedSession": {
+    "started": false,
+    "environmentId": "a5da396f-dbdb-4a27-9611-dc4b45acb03d",
+    "serviceIds": [],
+    "usageMeasured": false
+  }
 }
-
