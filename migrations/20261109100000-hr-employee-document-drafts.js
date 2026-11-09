@@ -1,0 +1,12 @@
+'use strict';
+module.exports={
+ async up(q,S){
+  await q.changeColumn('users','role',{type:S.ENUM('admin','employee','client','manager','hr'),allowNull:false,defaultValue:'employee'});
+  const id=()=>({type:S.INTEGER,primaryKey:true,autoIncrement:true,allowNull:false}),ref=(model)=>({type:S.INTEGER,allowNull:false,references:{model,key:'id'},onDelete:'RESTRICT',onUpdate:'CASCADE'}),stamp=()=>({createdAt:{type:S.DATE,allowNull:false},updatedAt:{type:S.DATE,allowNull:false}});
+  await q.createTable('employee_document_drafts',{id:id(),employeeId:ref('users'),version:{type:S.INTEGER,allowNull:false},createdBy:ref('users'),...stamp()});await q.addIndex('employee_document_drafts',['employeeId','id']);
+  await q.createTable('employee_document_revisions',{id:id(),documentId:ref('employee_document_drafts'),number:{type:S.INTEGER,allowNull:false},title:{type:S.STRING(200),allowNull:false},description:{type:S.TEXT,allowNull:false},attachment:{type:S.JSON,allowNull:false},authoredBy:ref('users'),...stamp()});await q.addIndex('employee_document_revisions',['documentId','number'],{unique:true});
+  await q.createTable('employee_document_events',{id:id(),documentId:ref('employee_document_drafts'),actorId:ref('users'),version:{type:S.INTEGER,allowNull:false},action:{type:S.STRING(20),allowNull:false},commandKey:{type:S.STRING(36),allowNull:false,unique:true},payloadHash:{type:S.STRING(64),allowNull:false},details:{type:S.JSON,allowNull:false},...stamp()});await q.addIndex('employee_document_events',['documentId','version'],{unique:true});
+  await q.createTable('hr_document_role_events',{id:id(),userId:ref('users'),actorId:ref('users'),version:{type:S.INTEGER,allowNull:false},commandKey:{type:S.STRING(36),allowNull:false,unique:true},payloadHash:{type:S.STRING(64),allowNull:false},details:{type:S.JSON,allowNull:false},...stamp()});await q.addIndex('hr_document_role_events',['userId','id']);
+ },
+ async down(q,S){const [[r]]=await q.sequelize.query("SELECT (SELECT COUNT(*) FROM users WHERE role='hr')+(SELECT COUNT(*) FROM employee_document_drafts)+(SELECT COUNT(*) FROM hr_document_role_events) total");if(Number(r.total))throw Error('Refusing to remove retained HR role/document history; roll forward');for(const table of ['hr_document_role_events','employee_document_events','employee_document_revisions','employee_document_drafts'])await q.dropTable(table);await q.changeColumn('users','role',{type:S.ENUM('admin','employee','client','manager'),allowNull:false,defaultValue:'employee'});}
+};

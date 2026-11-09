@@ -21,6 +21,8 @@ router.use("/auth", authRoutes);
 
 // Protected routes (require valid JWT)
 router.use(authenticate);
+router.use(require('../middleware/hrDomainScope'));
+router.use('/employee-documents', require('./employeeDocumentRoutes'));
 
 router.use("/employee", employeeRoutes);
 router.use("/attendance", attendanceRoutes);

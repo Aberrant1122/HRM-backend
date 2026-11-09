@@ -1,0 +1,13 @@
+const router=require('express').Router(),m=require('../models'),c=require('../controllers/employeeDocumentController')(m),roles=require('../controllers/hrDocumentRoleController')(m,c);
+router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});
+router.use(c.authorize);
+router.get('/options',c.options);
+router.get('/roles/:userId',roles.read);
+router.post('/roles/commands',roles.command);
+router.get('/',c.list);
+router.get('/employee/:employeeId',c.list);
+router.get('/revisions/:revisionId/download',c.download);
+router.post('/uploads',require('../middleware/handbookUpload'),c.upload);
+router.get('/:documentId/revisions',c.revisions);
+router.get('/:documentId',c.read);
+module.exports=router;

@@ -1250,17 +1250,6 @@ const updateEmployeeRole = async (req, res) => {
   }
 
   try {
-    const employee = await User.findOne({
-      where: { id: userId },
-    });
-
-    if (!employee) {
-      return res.status(404).json({
-        success: false,
-        message: "Employee not found"
-      });
-    }
-
     // Prevent changing own role
     if (parseInt(userId) === req.user.id) {
       return res.status(400).json({
@@ -1269,10 +1258,18 @@ const updateEmployeeRole = async (req, res) => {
       });
     }
 
-    const oldRole = employee.role;
-
-    // Update role
-    await employee.update({ role });
+    // Serialize with the audited HR role workflow, including its target lock.
+    const {employee,oldRole} = await User.sequelize.transaction(async transaction => {
+      const users = new Map();
+      for (const id of [...new Set([req.user.id,Number(userId)])].sort((a,b)=>a-b)) users.set(id,await User.findByPk(id,{transaction,lock:transaction.LOCK.UPDATE}));
+      const actor=users.get(req.user.id),employee=users.get(Number(userId));
+      if(!actor||actor.role!=='admin'||actor.status!=='active'||Number(actor.sessionVersion)!==Number(req.user.sessionVersion??0))throw Object.assign(Error('Current administrator access required'),{status:403});
+      if(!employee)throw Object.assign(Error('Employee not found'),{status:404});
+      if(employee.role==='hr')throw Object.assign(Error('Use the audited HR document role workflow to change an HR role'),{status:409});
+      const oldRole=employee.role;
+      await employee.update({role},{transaction});
+      return {employee,oldRole};
+    });
 
     // TODO: Send notification if role changed to manager
     if (role === "manager" && oldRole !== "manager") {
@@ -1292,6 +1289,7 @@ const updateEmployeeRole = async (req, res) => {
       }
     });
   } catch (error) {
+    if(error.status)return res.status(error.status).json({success:false,message:error.message});
     console.error("Error in updateEmployeeRole:", error);
     return res.status(500).json({
       success: false,

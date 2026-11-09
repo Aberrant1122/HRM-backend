@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('EmployeeDocumentRevision',{documentId:{type:D.INTEGER,allowNull:false},number:{type:D.INTEGER,allowNull:false},title:{type:D.STRING(200),allowNull:false},description:{type:D.TEXT,allowNull:false},attachment:{type:D.JSON,allowNull:false},authoredBy:{type:D.INTEGER,allowNull:false}},{tableName:'employee_document_revisions'});
