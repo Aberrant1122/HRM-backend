@@ -6,8 +6,9 @@ const raw = row => ({ id: row.id, userId: row.userId, date: row.date, day: day(r
 const fact = (date, rows) => rows.length === 1 ? { ...raw(rows[0]), recordState: 'recorded', records: rows.map(raw) } : { date, day: day(date), id: null, clockIn: null, clockOut: null, totalHours: null, formattedHours: null, status: rows.length ? 'conflict' : 'missing', recordState: rows.length ? 'conflict' : 'missing', records: rows.map(raw) };
 module.exports = ({ sequelize: db, Attendance, User }) => {
   const wrap = fn => async (req, res) => {
+    res.setHeader('Cache-Control','private, no-store');
     try { res.json(await fn(req)); }
-    catch (error) { res.status(error.status || 503).json({ message: error.status ? error.message : 'Attendance report unavailable' }); }
+    catch (error) { res.status(error.status || 503).json({ message: error.status ? error.message : 'Attendance report unavailable',...(error.code&&{code:error.code,review:error.review}) }); }
   };
   const invalid = () => { throw Object.assign(Error('Invalid attendance report filter'), { status: 400 }); };
   const selected = query => { const date = query.date ?? new Date().toISOString().slice(0, 10); if (!validDate(date)) invalid(); return date; };
@@ -27,10 +28,11 @@ module.exports = ({ sequelize: db, Attendance, User }) => {
   const directory = wrap(async req => db.transaction({ isolationLevel: 'REPEATABLE READ', readOnly: true }, async transaction => {
     if (Object.keys(req.query).some(k => k !== 'date')) invalid();
     const date = selected(req.query);
+    const populationScope = await require('../services/legacyPopulationReview')({sequelize:db}).assertReconciled('attendance',{from:date,to:date,transaction});
     const users = await User.findAll({ where: { role: 'employee' }, attributes: ['id', 'fullName', 'email'], order: [['id', 'ASC']], transaction });
     const rows = await Attendance.findAll({ where: { date }, order: [['id', 'ASC']], transaction });
     const map = new Map(); for (const row of rows) { if (!map.has(row.userId)) map.set(row.userId, []); map.get(row.userId).push(row); }
-    return { success: true, date, count: users.length, data: users.map(user => ({ ...fact(date, map.get(user.id) || []), userId: user.id, fullName: user.fullName, email: user.email })) };
+    return { success: true, date, count: users.length, populationScope, data: users.map(user => ({ ...fact(date, map.get(user.id) || []), userId: user.id, fullName: user.fullName, email: user.email })) };
   }));
   const listing = global => wrap(async req => {
     const q = req.query, allowed = ['page', 'limit', 'date', 'startDate', 'endDate', 'status', 'search'];

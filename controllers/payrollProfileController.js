@@ -30,51 +30,20 @@ exports.getAllPayrollProfiles = async (req, res) => {
 
 // Get employees without payroll profiles (Admin only)
 exports.getEmployeesWithoutProfiles = async (req, res) => {
+    res.setHeader('Cache-Control','private, no-store');
     try {
-        const employees = await User.findAll({
-            where: {
-                role: "employee",
-                status: "active",
-            },
-            include: [
-                {
-                    model: PayrollProfile,
-                    as: "payrollProfile",
-                    required: false,
-                },
-                {
-                    model: UserInfo,
-                    as: "userInfo",
-                    attributes: ["salary"],
-                },
-            ],
+        const db=require('../models'),day=new Date().toISOString().slice(0,10);
+        const result=await db.sequelize.transaction({isolationLevel:'REPEATABLE READ'},async transaction=>{
+            const populationScope=await require('../services/legacyPopulationReview')(db).assertReconciled('profiles',{from:day,to:day,transaction,actor:req.user});
+            const employees=await User.findAll({where:{role:'employee',status:'active'},include:[{model:PayrollProfile,as:'payrollProfile',required:false},{model:UserInfo,as:'userInfo',attributes:['salary']}],transaction});
+            return{populationScope,data:employees.filter(emp=>!emp.payrollProfile).map(emp=>({id:emp.id,fullName:emp.fullName,email:emp.email,role:emp.role,status:emp.status,salary:emp.userInfo?.salary||0}))};
         });
-
-        const employeesWithoutProfiles = employees.filter(
-            (emp) => !emp.payrollProfile
-        );
-
-        res.json({
-            success: true,
-            data: employeesWithoutProfiles.map((emp) => ({
-                id: emp.id,
-                fullName: emp.fullName,
-                email: emp.email,
-                role: emp.role,
-                status: emp.status,
-                salary: emp.userInfo?.salary || 0,
-            })),
-        });
-    } catch (error) {
-        console.error("Error fetching employees without profiles:", error);
-        res.status(500).json({
-            success: false,
-            message: "Failed to fetch employees",
-            error: error.message,
-        });
+        return res.json({success:true,...result});
+    } catch(error) {
+        if(error.status)return res.status(error.status).json({success:false,message:error.message,code:error.code,review:error.review});
+        return res.status(500).json({success:false,message:'Failed to fetch employees'});
     }
 };
-
 // Get payroll profile by employee ID
 exports.getPayrollProfile = async (req, res) => {
     try {

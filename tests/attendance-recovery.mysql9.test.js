@@ -21,7 +21,7 @@ test('durable attendance receipts, object reconciliation and recorded facts', { 
     const today = new Date().toISOString().slice(0, 10);
     const req = (user, key = crypto.randomUUID(), body = {}, files = []) => ({ user, headers: { 'idempotency-key': key }, body: { workDate: today, ...body }, files });
     const file = () => { const p = path.join(directory, crypto.randomUUID()); fs.writeFileSync(p, 'Synthetic private content'); return { path: p, originalname: 'synthetic.txt', mimetype: 'text/plain', size: fs.statSync(p).size }; };
-    const res = () => ({ code: 200, status(c) { this.code = c; return this; }, json(v) { this.body = v; return this; } });
+    const res = () => ({ code: 200, headers:{}, setHeader(k,v){this.headers[k]=v;}, status(c) { this.code = c; return this; }, json(v) { this.body = v; return this; } });
     await t.test('same-key concurrent commands return exact durable result after service restart; payload/actor/session mismatch conflicts', async () => {
       const user = await actor(), r = req(user);
       const [a, b] = await Promise.all([recovery.execute(r, 'in'), recovery.execute(r, 'in')]); assert.deepEqual(a, b);
