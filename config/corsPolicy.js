@@ -3,8 +3,10 @@ module.exports = function corsPolicy(env = process.env, onBlocked = () => {}) {
   const allowedOrigins = [
     'http://localhost:3000', 'http://127.0.0.1:3000',
     'http://localhost:3001', 'http://127.0.0.1:3001', env.FRONTEND_URL,
-    'https://human-resource-management-production-eeeb.up.railway.app',
-    'https://human-resource-management-production-b7d0.up.railway.app',
+    ...(env.APP_ENV === 'staging' ? [] : [
+      'https://human-resource-management-production-eeeb.up.railway.app',
+      'https://human-resource-management-production-b7d0.up.railway.app',
+    ]),
   ].filter(Boolean);
   return {
     origin(origin, callback) {
