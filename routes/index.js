@@ -61,4 +61,5 @@ router.use("/organization", require('./organizationRoutes'));
 router.use("/designations", require('./designationRoutes'));
 
 router.use('/employee-recommendations', require('./employeeRecommendationRoutes'));
+router.use('/recorded-probation-coverage', require('./recordedProbationCoverageRoutes'));
 module.exports = router;
