@@ -53,6 +53,7 @@ router.use("/hr-letters", require('./hrLetterRoutes'));
 router.use("/performance", require('./performanceRoutes'));
 router.use("/improvement-plans", require('./improvementPlanRoutes'));
 router.use("/performance-targets", require('./performanceTargetRoutes'));
+router.use("/recorded-headcount", require('./recordedHeadcountRoutes'));
 router.use("/offboarding", require('./offboardingRoutes'));
 router.use("/onboarding", require('./onboardingRoutes'));
 router.use("/probation", require('./probationRoutes'));
