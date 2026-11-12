@@ -26,9 +26,11 @@ const {
 
 // --- Leave Types (Admin Config) ---
 router.get("/types", getAllLeaveTypes);
-router.post("/types", isAdmin, createLeaveType);
-router.put("/types/:id", isAdmin, updateLeaveType);
-router.patch("/types/:id/toggle", isAdmin, toggleLeaveTypeStatus);
+const liveTypes=require('../controllers/liveLeaveTypeController')(require('../models'));
+router.get('/type-catalog',isAdmin,liveTypes.list);router.get('/type-catalog/:typeId',isAdmin,liveTypes.read);router.post('/type-catalog/commands',isAdmin,liveTypes.command);
+router.post("/types", isAdmin, liveTypes.legacyWrite);
+router.put("/types/:id", isAdmin, liveTypes.legacyWrite);
+router.patch("/types/:id/toggle", isAdmin, liveTypes.legacyWrite);
 
 // --- Employee Actions ---
 router.post("/apply", workflow.apply);
