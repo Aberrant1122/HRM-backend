@@ -271,6 +271,7 @@ const calculateEmployeePayroll = async (employeePayrollId, performedBy = null) =
             PayrollAdjustment.findAll({ where: { employee_payroll_id: employeePayrollId }, raw: true, transaction: t }),
         ]);
 
+        await require('./payrollLeaveBasisGuard')(sequelize,[payroll.employee_id],start_date,end_date,t);
         const flattenedLeaves = leaves.map(l => ({ ...l.get({ plain: true }), leaveTypePaid: l.leaveType.is_paid }));
 
         // 4. Run Calculation
@@ -360,6 +361,7 @@ const calculatePeriodPayroll = async (periodId, performedBy = null) => {
             PayrollAdjustment.findAll({ where: { employee_payroll_id: payrollIds }, raw: true, transaction: t })
         ]);
 
+        await require('./payrollLeaveBasisGuard')(sequelize,employeeIds,start_date,end_date,t);
         // 4. Map & Group Data
         const attendanceMap = allAttendances.reduce((acc, curr) => {
             (acc[curr.userId] = acc[curr.userId] || []).push(curr);
