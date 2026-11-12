@@ -1,29 +1,31 @@
 const crypto=require('node:crypto'),{Op}=require('sequelize');
-const {sequelize,User,UserInfo,Department,DesignationCategory,OrganizationState,OrganizationAssignment,OrganizationEvent}=require('../models');
+const models=require('../models'),{sequelize,User,UserInfo,Department,DesignationCategory,OrganizationState,OrganizationAssignment,OrganizationEvent}=models;
+const targetScope=require('../utils/organizationTarget');
 const positive=n=>Number.isSafeInteger(n)&&n>0,internal=u=>u&&['admin','manager','employee'].includes(u.role),attrs=['id','fullName','email','role','status'];
 const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
 function idFrom(req){const id=Number(req.params.employeeId);if(!positive(id)||!/^\d+$/.test(req.params.employeeId))fail(400,'Valid account required');return id;}
 function normalized(body,actorId,employeeId){
-  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['commandKey','expectedVersion','departmentId','managerId','designation','designationId','reason'].includes(k)))fail(400,'Valid assignment command required');
+  if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['commandKey','expectedVersion','departmentId','managerId','designation','designationId','reason','employmentAsOf'].includes(k)))fail(400,'Valid assignment command required');
   if(typeof body.commandKey!=='string'||!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(body.commandKey)||!Number.isSafeInteger(body.expectedVersion)||body.expectedVersion<0)fail(400,'Valid UUID and expected version required');
   for(const k of ['departmentId','managerId'])if(body[k]!==null&&!positive(body[k]))fail(400,'Select an existing department/manager or explicitly clear the assignment');
   if(body.designation!==null&&(typeof body.designation!=='string'||!body.designation.trim()||body.designation.trim().length>200))fail(400,'Designation must contain 1–200 characters or be explicitly empty');
   if(typeof body.reason!=='string'||!body.reason.trim()||body.reason.trim().length>1000)fail(400,'Reason must contain 1–1000 characters');
   if(body.designationId!==undefined&&body.designationId!==null&&!positive(body.designationId))fail(400,'Select an existing designation or explicitly clear it');
   if(body.designationId!==undefined&&body.designationId!==null&&body.designation!==null)fail(400,'A category selection supplies its own designation label');
-  return{actorId,employeeId,expectedVersion:body.expectedVersion,departmentId:body.departmentId,managerId:body.managerId,designation:body.designation?.trim()??null,...(body.designationId!==undefined&&{designationId:body.designationId}),reason:body.reason.trim()};
+  if(body.employmentAsOf!==undefined&&!targetScope.civil(body.employmentAsOf))fail(400,'Valid explicit employment reference date required');
+  return{actorId,employeeId,expectedVersion:body.expectedVersion,departmentId:body.departmentId,managerId:body.managerId,designation:body.designation?.trim()??null,...(body.designationId!==undefined&&{designationId:body.designationId}),reason:body.reason.trim(),...(body.employmentAsOf!==undefined&&{employmentAsOf:body.employmentAsOf})};
 }
-async function snapshot(id,t,before){
+async function snapshot(id,t,before,employmentAsOf){
   const employee=await User.findByPk(id,{attributes:attrs,transaction:t});if(!employee)fail(404,'Account not found');
   const legacy=await UserInfo.findOne({where:{userId:id},attributes:['department','position','reportingManager'],transaction:t}),assignment=await OrganizationAssignment.findOne({where:{employeeId:id},transaction:t});
   const rows=assignment?await OrganizationEvent.findAll({where:{assignmentId:assignment.id,...(before&&{version:{[Op.lt]:before}})},attributes:['id','actorId','version','details','createdAt'],order:[['version','DESC']],limit:101,transaction:t}):[],history=rows.slice(0,100),ids=[...new Set([assignment?.managerId,...history.map(e=>e.actorId)].filter(Boolean))];
   const people=ids.length?await User.findAll({where:{id:ids},attributes:attrs,transaction:t}):[],department=assignment?.departmentId?await Department.findByPk(assignment.departmentId,{attributes:['id','name','isActive'],transaction:t}):null;
   const designationCategory=assignment?.designationId?await DesignationCategory.findByPk(assignment.designationId,{attributes:['id','name','isActive','version'],transaction:t}):null;
-  return{employee,legacy,assignment,department,designationCategory,people,history,hasEarlierHistory:rows.length>100};
+  return{employee,targetEligibility:await targetScope.evidence(models,employee,employmentAsOf,t),legacy,assignment,department,designationCategory,people,history,hasEarlierHistory:rows.length>100};
 }
-const readSnapshot=(id,before)=>sequelize.transaction({isolationLevel:'REPEATABLE READ',readOnly:true},t=>snapshot(id,t,before));
+const readSnapshot=(id,before,employmentAsOf)=>sequelize.transaction({isolationLevel:'REPEATABLE READ',readOnly:true},t=>snapshot(id,t,before,employmentAsOf));
 function error(res,e){if(Number.isInteger(e.code))return res.status(e.code).json({success:false,message:e.message});if(['SequelizeUniqueConstraintError','SequelizeForeignKeyConstraintError'].includes(e.name))return res.status(409).json({success:false,message:'Record changed or command key is bound to another request. Reload before continuing.'});console.error('Organization request failed');return res.status(500).json({success:false,message:'Organization workflow unavailable'});}
-exports.read=async(req,res)=>{try{const id=idFrom(req),before=req.query.before===undefined?undefined:Number(req.query.before);if(req.query.before!==undefined&&(typeof req.query.before!=='string'||!/^\d+$/.test(req.query.before)||!positive(before)))fail(400,'Valid history cursor required');return res.json({success:true,data:await readSnapshot(id,before)});}catch(e){return error(res,e);}};
+exports.read=async(req,res)=>{try{if(Object.keys(req.query).some(k=>!['before','employmentAsOf'].includes(k))||req.query.employmentAsOf!==undefined&&!targetScope.civil(req.query.employmentAsOf))fail(400,'Valid employment reference date/history query required');const id=idFrom(req),before=req.query.before===undefined?undefined:Number(req.query.before);if(req.query.before!==undefined&&(typeof req.query.before!=='string'||!/^\d+$/.test(req.query.before)||!positive(before)))fail(400,'Valid history cursor required');return res.json({success:true,data:await readSnapshot(id,before,req.query.employmentAsOf)});}catch(e){return error(res,e);}};
 exports.command=async(req,res)=>{try{
   const id=idFrom(req),input=normalized(req.body,req.user.id,id),commandKey=req.body.commandKey.toLowerCase(),payloadHash=crypto.createHash('sha256').update(JSON.stringify(input)).digest('hex');
   const outcome=await sequelize.transaction({isolationLevel:'READ COMMITTED'},async t=>{
@@ -36,7 +38,7 @@ exports.command=async(req,res)=>{try{
     const previous=await OrganizationEvent.findOne({where:{commandKey},transaction:t});if(previous){if(previous.payloadHash!==payloadHash)fail(409,'Command key is bound to different content or actor');return{replayed:true,appliedVersion:previous.version};}
     const assignment=await OrganizationAssignment.findOne({where:{employeeId:id},transaction:t,lock:t.LOCK.UPDATE}),before=assignment?.toJSON()??null;
     if((assignment?.version??0)!==input.expectedVersion)fail(409,'Organization assignment changed. Reload before applying.');
-    if(!internal(employee))fail(409,'New organization edits require an internal account; retained history remains available');
+    const targetEligibility=await targetScope.evidence(models,employee,input.employmentAsOf,t);if(!targetEligibility.allowed)fail(409,employee.role==='hr'?'HR target requires a recorded non-void employment period covering the selected reference date':'New organization edits require an internal account; retained history remains available');
     if(input.managerId===id)fail(400,'An account cannot report to itself');
     const manager=input.managerId?users.get(input.managerId):null;
     if(input.managerId!==null&&(!internal(manager)||manager.status!=='active')&&input.managerId!==assignment?.managerId)fail(400,'Choose an active internal reporting manager');
@@ -48,15 +50,17 @@ exports.command=async(req,res)=>{try{
     const changes={departmentId:input.departmentId,managerId:input.managerId,...(DesignationCategory&&{designationId}),designation:designationCategory?(designationId===assignment?.designationId?assignment.designation:designationCategory.name):input.designation,version:(assignment?.version??0)+1};
     const saved=assignment?await assignment.update(changes,{transaction:t}):await OrganizationAssignment.create({employeeId:id,createdBy:actor.id,...changes},{transaction:t});
     graph.version++;await graph.save({transaction:t});
-    const details={reason:input.reason,before,after:saved.toJSON(),designationCategory:designationCategory?{id:designationCategory.id,name:designationCategory.name,isActive:designationCategory.isActive,version:designationCategory.version}:null,department:department?{id:department.id,name:department.name,isActive:department.isActive}:null,manager:manager?{id:manager.id,fullName:manager.fullName,role:manager.role,status:manager.status}:null,actor:{id:actor.id,fullName:actor.fullName}};
+    const details={reason:input.reason,targetEligibility,before,after:saved.toJSON(),designationCategory:designationCategory?{id:designationCategory.id,name:designationCategory.name,isActive:designationCategory.isActive,version:designationCategory.version}:null,department:department?{id:department.id,name:department.name,isActive:department.isActive}:null,manager:manager?{id:manager.id,fullName:manager.fullName,role:manager.role,status:manager.status}:null,actor:{id:actor.id,fullName:actor.fullName}};
     await OrganizationEvent.create({assignmentId:saved.id,actorId:actor.id,managerId:input.managerId,departmentId:input.departmentId,commandKey,payloadHash,version:saved.version,details},{transaction:t});
     return{replayed:false,appliedVersion:saved.version};
-  });return res.json({success:true,...outcome,data:await readSnapshot(id)});
+  });return res.json({success:true,...outcome,data:await readSnapshot(id,undefined,input.employmentAsOf)});
 }catch(e){return error(res,e);}};
 exports.options=async(req,res)=>{try{
-  if(Object.keys(req.query).some(k=>!['kind','search'].includes(k))||!['people','accounts','departments','designations'].includes(req.query.kind)||typeof req.query.search!=='string'||req.query.search.trim().length<2||req.query.search.trim().length>100)fail(400,'Choose accounts, people or departments and enter 2–100 search characters');
-  const sql=req.query.kind==='designations'?"SELECT id,name,isActive FROM designation_categories WHERE isActive=1 AND LOCATE(:search,name)>0 ORDER BY name,id LIMIT 20":req.query.kind!=='departments'?"SELECT id,fullName,email,role,status FROM users WHERE role IN ('admin','manager','employee') "+(req.query.kind==='people'?"AND status='active' ":'')+"AND (LOCATE(:search,fullName)>0 OR LOCATE(:search,email)>0) ORDER BY fullName,id LIMIT 20":"SELECT id,name,isActive FROM departments WHERE isActive=1 AND LOCATE(:search,name)>0 ORDER BY name,id LIMIT 20";
-  const [rows]=await sequelize.query(sql,{replacements:{search:req.query.search.trim()}});return res.json({success:true,data:rows});
+  if(Object.keys(req.query).some(k=>!['kind','search','employmentAsOf'].includes(k))||!['people','accounts','departments','designations'].includes(req.query.kind)||typeof req.query.search!=='string'||req.query.search.trim().length<2||req.query.search.trim().length>100)fail(400,'Choose accounts, people or departments and enter 2–100 search characters');
+  if(req.query.employmentAsOf!==undefined&&(req.query.kind!=='accounts'||!targetScope.civil(req.query.employmentAsOf)))fail(400,'A valid employment reference date is supported only for account target search');
+  const hrAccounts=req.query.kind==='accounts'&&req.query.employmentAsOf!==undefined;
+  const sql=hrAccounts?"SELECT u.id,u.fullName,u.email,u.role,u.status FROM users u WHERE (u.role IN ('admin','manager','employee') OR (u.role='hr' AND EXISTS (SELECT 1 FROM employment_periods p WHERE p.employeeId=u.id AND p.voided=0 AND p.version>0 AND p.startDate>='1000-01-01' AND p.startDate<=:employmentAsOf AND (p.endDate IS NULL OR p.endDate>=:employmentAsOf) AND (p.endDate IS NULL OR p.startDate<=p.endDate)))) AND (LOCATE(:search,u.fullName)>0 OR LOCATE(:search,u.email)>0) ORDER BY u.fullName,u.id LIMIT 20":req.query.kind==='designations'?"SELECT id,name,isActive FROM designation_categories WHERE isActive=1 AND LOCATE(:search,name)>0 ORDER BY name,id LIMIT 20":req.query.kind!=='departments'?"SELECT id,fullName,email,role,status FROM users WHERE role IN ('admin','manager','employee') "+(req.query.kind==='people'?"AND status='active' ":'')+"AND (LOCATE(:search,fullName)>0 OR LOCATE(:search,email)>0) ORDER BY fullName,id LIMIT 20":"SELECT id,name,isActive FROM departments WHERE isActive=1 AND LOCATE(:search,name)>0 ORDER BY name,id LIMIT 20";
+  const [rows]=await sequelize.query(sql,{replacements:{search:req.query.search.trim(),...(hrAccounts&&{employmentAsOf:req.query.employmentAsOf})}});return res.json({success:true,data:rows});
 }catch(e){return error(res,e);}};
 exports.directory=async(req,res)=>{try{
   if(Object.keys(req.query).some(k=>!['search','page'].includes(k))||req.query.search!==undefined&&(typeof req.query.search!=='string'||req.query.search.length>100))fail(400,'Valid search required');
