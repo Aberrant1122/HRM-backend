@@ -6,7 +6,7 @@ const workflow = require('../controllers/leaveWorkflow')(require('../models'));
 const policies=require('../controllers/leavePolicies')(require('../models'));
 router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});
 const balances=require('../controllers/leaveBalanceController')(require('../models'));
-router.get('/balances/access',balances.access);router.get('/balances/options',balances.options);router.get('/balances/permissions/:userId/:employeeId',isAdmin,balances.grantRead);router.post('/balances/permissions/commands',isAdmin,balances.grantCommand);router.post('/balances/commands',balances.command);router.get('/balances/:employeeId',balances.read);
+router.get('/balances/access',balances.access);router.get('/balances/types',balances.typeCatalog);router.get('/balances/options',balances.options);router.get('/balances/permissions/:userId/:employeeId',isAdmin,balances.grantRead);router.post('/balances/permissions/commands',isAdmin,balances.grantCommand);router.post('/balances/commands',balances.command);router.get('/balances/:employeeId',balances.read);
 router.get('/policies',isAdmin,policies.list);router.post('/policies',isAdmin,policies.create);
 router.get('/policy-profile/:employeeId',policies.profile);router.post('/policy-profile/:employeeId',isAdmin,policies.assign);
 router.get('/workflow/mine', workflow.myList);
