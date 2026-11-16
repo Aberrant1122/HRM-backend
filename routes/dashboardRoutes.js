@@ -6,6 +6,7 @@ const { getAccountActivity } = require('../controllers/accountActivityController
 
 router.get('/account-activity', isAdmin, getAccountActivity);
 router.get('/workforce',isAdmin,require('../controllers/workforceDashboardController')(require('../models')));
+router.get('/hr-tasks',isAdmin,require('../controllers/pendingHrTaskDashboardController')(require('../models')));
 router.get('/summary', dashboardController.getSummary);
 
 module.exports = router;
