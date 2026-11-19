@@ -82,6 +82,7 @@ const updateBankInfoValidation = [
   //   .withMessage("Please provide a valid IBAN"),
 
   body("IBAN")
+    .optional()
     .trim()
     .notEmpty()
     .withMessage("IBAN is required")

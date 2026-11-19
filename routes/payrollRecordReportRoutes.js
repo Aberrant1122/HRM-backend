@@ -1,0 +1,13 @@
+const router=require('express').Router();
+router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});
+router.use(require('../middleware/authMiddleware').isAdmin);
+const currency=require('../controllers/payrollCurrencyController')(require('../models'));
+router.get('/currency/:kind/:id',currency.read);router.post('/currency/commands',currency.command);
+router.get('/',require('../controllers/payrollRecordReportController')(require('../models')));
+router.get('/compensation',require('../controllers/compensationSummaryController')(require('../models')));
+const statement=require('../controllers/payrollStatementController')(require('../models'));
+router.get('/periods/:periodId',statement);
+router.get('/periods/:periodId/payslips/:rowId',statement);
+router.get('/periods/:periodId/overtime',require('../controllers/recordedOvertimeController')(require('../models')));
+router.get('/expenditure',require('../controllers/workforceExpenditureController')(require('../models')));
+module.exports=router;

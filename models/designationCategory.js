@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('DesignationCategory',{name:{type:D.STRING(200),allowNull:false},nameKey:{type:D.STRING(200),allowNull:false,unique:true},description:{type:D.TEXT,allowNull:true},isActive:{type:D.BOOLEAN,allowNull:false},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'designation_categories'});

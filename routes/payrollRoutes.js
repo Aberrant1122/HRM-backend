@@ -45,12 +45,20 @@ router.get("/history", authenticate, payrollController.getEmployeePayrollHistory
 
 // Payroll Profile Routes
 const payrollProfileController = require("../controllers/payrollProfileController");
+const revisions = require('../controllers/compensationRevisions')(require('../models'));
+router.get('/profile/:id/revisions', authenticate, isAdmin, (req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();}, revisions.read);
+router.post('/profile/:id/revisions/commands', authenticate, isAdmin, revisions.command);
 router.get("/profiles", authenticate, isAdmin, payrollProfileController.getAllPayrollProfiles);
 router.get("/profiles/missing", authenticate, isAdmin, payrollProfileController.getEmployeesWithoutProfiles);
 router.get("/profile/by-id/:id", authenticate, isAdmin, payrollProfileController.getPayrollProfileById);
 router.get("/profile/:employeeId", authenticate, isAdmin, payrollProfileController.getPayrollProfile);
 router.post("/profile", authenticate, isAdmin, payrollProfileController.createPayrollProfile);
-router.put("/profile/:id", authenticate, isAdmin, payrollProfileController.updatePayrollProfile);
-router.delete("/profile/:id", authenticate, isAdmin, payrollProfileController.deletePayrollProfile);
+router.put("/profile/:id", authenticate, isAdmin, revisions.protectLegacyUpdate, payrollProfileController.updatePayrollProfile);
+router.delete("/profile/:id", authenticate, isAdmin, revisions.retain);
 
+const advanceLedger = require('../controllers/payrollAdvances');
+router.get('/advances/options',authenticate,isPayrollAdmin,(req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();},advanceLedger.options);
+router.route('/advances/:employeeId').all(authenticate, isPayrollAdmin, (req,res,next) => { res.setHeader('Cache-Control','private, no-store'); next(); }).get(advanceLedger.read).post(advanceLedger.write);
+const components = require('../controllers/payrollComponents');
+router.route('/components/:id').all(authenticate,isPayrollAdmin,(req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();}).get(components).post(components);
 module.exports = router;

@@ -1,0 +1,1 @@
+const router=require('express').Router(),{isAdmin}=require('../middleware/authMiddleware');router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});router.use(isAdmin);router.get('/',require('../controllers/recordedLeaveCoverageController')(require('../models')));module.exports=router;

@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('PolicyAssignment',{revisionId:{type:D.INTEGER,allowNull:false},employeeId:{type:D.INTEGER,allowNull:false},mandatory:{type:D.BOOLEAN,allowNull:false},version:{type:D.INTEGER,allowNull:false},readAt:{type:D.DATE,allowNull:true},acknowledgedAt:{type:D.DATE,allowNull:true}},{tableName:'policy_assignments'});

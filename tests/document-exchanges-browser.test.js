@@ -1,0 +1,41 @@
+const assert = require("node:assert/strict");
+const {chromium} = require(process.env.PLAYWRIGHT_MODULE);
+(async()=>{
+  const ui="http://127.0.0.1:13694", api="http://127.0.0.1:13695/api";
+  const browser=await chromium.launch({headless:true,executablePath:process.env.HRM_CHROME_PATH});
+  try {
+    const page=await browser.newPage();page.setDefaultTimeout(12000);
+    await page.route("**/*",r=>new URL(r.request().url()).hostname==="127.0.0.1"?r.continue():r.abort());
+    await page.goto(ui+"/login");
+    await page.locator("#email").fill("admin@example.invalid");await page.locator("#password").fill("Synthetic-local-123");
+    await page.getByRole("button",{name:/sign in/i}).click();await page.waitForURL("**/admin/dashboard");
+    await page.getByRole("link",{name:"Open document register"}).click();
+    await page.getByLabel("Find employee").fill("employee@example.invalid");
+    await page.getByRole("button",{name:"Search employees"}).click();
+    await page.locator("form select[required]").selectOption("2");
+    const title="Synthetic signed contract "+Date.now();
+    await page.getByLabel("Document name").fill(title);await page.getByLabel("Direction").selectOption("receive");
+    await page.getByLabel("Due date (optional)").fill("2026-11-30");
+    await page.getByRole("button",{name:"Add pending document"}).click();
+    const record=page.getByRole("article").filter({hasText:title});
+    await record.getByRole("button",{name:"Update status"}).click();
+    await record.getByLabel("Completion or cancellation note").fill("Synthetic PDF received");
+    await record.getByRole("button",{name:"Mark received"}).click();
+    await record.waitFor({state:"hidden"});
+    await page.getByLabel("Show").selectOption("closed");await record.getByText("Received · Synthetic PDF received").waitFor();
+    await page.reload();await page.getByLabel("Show").selectOption("closed");await record.getByText("Received · Synthetic PDF received").waitFor();
+    const headers={Authorization:"Bearer "+await page.evaluate(()=>localStorage.getItem("token"))};
+    const command=data=>page.request.post(api+"/employee-documents/exchanges/commands",{headers,data});
+    const key=()=>require("node:crypto").randomUUID();
+    const item={action:"create",commandKey:key(),employeeId:2,direction:"send",title:"Synthetic cancellation",dueDate:"2026-11-30"};
+    assert.equal((await command({...item,commandKey:key(),dueDate:"2026-02-30"})).status(),400);
+    for(let i=0;i<2;i++)assert.equal((await command(item)).status(),200);
+    assert.equal((await command({...item,title:"Changed"})).status(),409);
+    const close={action:"cancel",commandKey:key(),id:item.commandKey,note:"Recorded in error"};
+    for(let i=0;i<2;i++)assert.equal((await command(close)).status(),200);
+    assert.equal((await command({...close,commandKey:key()})).status(),409);
+    const employee=await (await page.request.post(api+"/auth/login",{data:{email:"employee@example.invalid",password:"Synthetic-local-123"}})).json();
+    assert.equal((await page.request.get(api+"/employee-documents/exchanges",{headers:{Authorization:"Bearer "+employee.token}})).status(),403);
+    console.log("PASS real Chrome + MySQL: dashboard navigation, record pending contract, due date, manual receipt, retained closed history, unauthorized denial.");
+  }finally{await browser.close();}
+})().catch(e=>{console.error(e);process.exitCode=1;});

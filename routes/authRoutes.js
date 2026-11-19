@@ -19,7 +19,8 @@ const {
 const router = express.Router();
 
 // Public routes
-router.post("/register", validateRegister, register);
+// Account creation with caller-selected roles requires an existing administrator.
+router.post("/register", isAuthenticated, isAdmin, validateRegister, register);
 router.post("/login", validateLogin, login);
 router.post("/request-password-reset", requestPasswordReset);
 router.post("/set-password", validateSetPassword, setPassword);
@@ -39,4 +40,7 @@ router.get("/check-project-manager", checkIsProjectManager);
 router.use(isAdmin);
 router.post("/invite-employee", validateInviteEmployee, inviteEmployee);
 
+const imports = require("../controllers/employeeImportController");
+router.get("/employee-imports", imports.history);
+router.post("/employee-imports", imports.submit);
 module.exports = router;

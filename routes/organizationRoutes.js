@@ -1,0 +1,12 @@
+const router=require('express').Router(),{isAdmin}=require('../middleware/authMiddleware'),c=require('../controllers/organizationController');
+router.use(isAdmin);router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});
+const numbering=require('../controllers/employeeNumbering')(require('../models'));
+const officialManagers=require('../controllers/officialManagers');
+const departmentStructure=require('../controllers/departmentStructureController')(require('../models'));
+router.get('/department-structures',departmentStructure.directory);
+router.get('/department/:departmentId/structure',departmentStructure.read);router.post('/department/:departmentId/structure',departmentStructure.command);
+router.get('/workforce-directory',require('../controllers/workforceDirectory').read);
+router.get('/employee/:employeeId/official-managers',officialManagers.read);
+router.post('/employee/:employeeId/official-managers',officialManagers.command);
+router.get('/employee/:employeeId/number',numbering.read);router.post('/employee/:employeeId/number',numbering.command);
+router.get('/',c.directory);router.get('/options',c.options);router.get('/employee/:employeeId',c.read);router.post('/employee/:employeeId/commands',c.command);module.exports=router;

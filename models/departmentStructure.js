@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('DepartmentStructure',{departmentId:{type:D.INTEGER,allowNull:false,unique:true},parentIds:{type:D.JSON,allowNull:false},headIds:{type:D.JSON,allowNull:false},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'department_structures'});

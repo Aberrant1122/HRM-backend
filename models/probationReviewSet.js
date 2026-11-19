@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('ProbationReviewSet',{caseId:{type:D.INTEGER,allowNull:false,unique:true},managerIds:{type:D.JSON,allowNull:false},hrIds:{type:D.JSON,allowNull:false},managerSources:{type:D.JSON,allowNull:false},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'probation_review_sets'});

@@ -7,6 +7,13 @@ class CronJobs {
    * @param {Object} io - Socket.IO instance
    */
   static init(io) {
+    let probationReminderRunning=false;
+    cron.schedule('*/5 * * * *', async () => {
+      if(probationReminderRunning)return; probationReminderRunning=true;
+      try{await require('./probationReminderProducer').run(require('../models'));}
+      catch{console.error('Probation expiry reminder generation failed');}
+      finally{probationReminderRunning=false;}
+    });
     // Run overdue task check every day at 9:00 AM
     cron.schedule('0 9 * * *', async () => {
       console.log('Running overdue task notification job...');
@@ -18,28 +25,15 @@ class CronJobs {
       }
     });
 
-    // Auto mark absents for overdue clock-ins every hour
-    cron.schedule('0 * * * *', async () => {
-      console.log('Running auto-mark absents job...');
-      try {
-        const { Attendance } = require('../models');
-        const { Op } = require('sequelize');
-        const threshold = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        
-        const [updatedCount] = await Attendance.update(
-          { status: "absent", totalHours: 0 },
-          {
-            where: {
-              clockOut: null,
-              clockIn: { [Op.lte]: threshold },
-              status: { [Op.ne]: "absent" },
-            },
-          }
-        );
-        console.log(`Auto-marked ${updatedCount} overdue clock-ins as absent`);
-      } catch (error) {
-        console.error('Error in auto-mark absents cron job:', error);
-      }
+    // Clock expectations come only from explicit dated run settings and pinned schedules.
+    // Never turn an unresolved/open punch into an absence or salary input.
+    let clockRunning=false,clockCursor=0;
+    const clockNotices=require('../services/attendanceClockNotices')(require('../models'));
+    cron.schedule('*/5 * * * *',async()=>{
+      if(clockRunning)return;clockRunning=true;
+      try{const result=await clockNotices.produce({after:clockCursor});clockCursor=result.hasMore?result.lastId:0;if(result.issues.length)console.error('Some configured clock-alert sources require review');}
+      catch{console.error('Configured clock-alert generation failed');}
+      finally{clockRunning=false;}
     });
 
     console.log('✅ Cron jobs initialized');

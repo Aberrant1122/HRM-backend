@@ -1,0 +1,8 @@
+const {test}=require('node:test'),assert=require('node:assert/strict'),Module=require('node:module');
+test('registered clock callback guards overlap, advances/resets batch cursor and recovers after producer failure',async()=>{
+ const original=Module._load,registered=[],calls=[],errors=[],oldError=console.error,oldLog=console.log;let resolve,behavior='pending';
+ Module._load=function(name,parent,...rest){if(parent?.filename.endsWith('utils\\cronJobs.js')||parent?.filename.endsWith('utils/cronJobs.js')){if(name==='node-cron')return{schedule:(expression,callback)=>registered.push({expression,callback})};if(name==='./notificationService')return{};if(name==='../models')return{};if(name==='../services/attendanceClockNotices')return()=>({produce:args=>{calls.push(args);if(behavior==='pending')return new Promise(r=>resolve=r);if(behavior==='fail')throw Error('Synthetic private source detail');return Promise.resolve({hasMore:false,lastId:99,issues:[]});}});}return original.call(this,name,parent,...rest);};console.error=(...args)=>errors.push(args.join(' '));console.log=()=>{};
+ try{delete require.cache[require.resolve('../utils/cronJobs')];require('../utils/cronJobs').init({});const clock=registered[2].callback;const running=clock();await clock();assert.deepEqual(calls,[{after:0}]);resolve({hasMore:true,lastId:50,issues:[]});await running;
+ behavior='fail';await clock();assert.equal(calls.at(-1).after,50);assert.deepEqual(errors,['Configured clock-alert generation failed']);behavior='done';await clock();assert.equal(calls.at(-1).after,50);await clock();assert.equal(calls.at(-1).after,0);
+ }finally{Module._load=original;console.error=oldError;console.log=oldLog;delete require.cache[require.resolve('../utils/cronJobs')];}
+});

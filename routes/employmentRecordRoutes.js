@@ -1,0 +1,12 @@
+const router=require('express').Router(),c=require('../controllers/employmentRecordController')(require('../models'));
+router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});
+const terms=require('../controllers/employmentTermsController')(require('../models'));
+const notices=require('../controllers/noticePeriodController')(require('../models'));
+router.get('/employee/:employeeId/notice-periods',notices.employeeRead);router.get('/notice-period/:periodId',notices.periodRead);router.post('/employee/:employeeId/notice-periods/commands',notices.command);router.get('/notice-period-summary',require('../controllers/noticeWorkforceController')(require('../models')));
+router.get('/employee/:employeeId/terms',terms.read);router.post('/employee/:employeeId/terms/commands',terms.command);
+router.get('/access',c.access);router.get('/options',c.options);router.get('/summary',c.summary);
+router.get('/permissions/:userId/:employeeId',c.grantRead);router.post('/permissions/commands',c.grantCommand);
+router.get('/employee/:employeeId',c.employeeRead);router.get('/period/:periodId',c.periodRead);router.post('/commands',c.command);
+router.get('/separation-report',require('../controllers/separationSourceReport')(require('../models')));
+router.get('/end-statistics',require('../controllers/employmentEndMeasureController')(require('../models')));
+module.exports=router;

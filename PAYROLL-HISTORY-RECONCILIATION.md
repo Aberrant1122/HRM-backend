@@ -1,0 +1,23 @@
+# Offline historical payroll comparison
+
+This command compares a local payroll export with explicitly supplied population decisions. It does not connect to a database, query current roles or employment dates, authenticate roster approvals, or repair payroll.
+
+```sh
+node scripts/reconcilePayrollHistory.js --payroll-export payroll-export.json --population population.json > comparison.json
+```
+
+Use trusted, access-controlled exports. Both inputs must identify the same `datasetId` and use `schemaVersion: 1`. Each input is limited to 8 MiB. The command reads the files and writes JSON to stdout; it has no output-file, database, network, mutation or regeneration option. Invalid input exits with status 1 and no report.
+
+The payroll export has exactly `schemaVersion`, `datasetId`, `source`, `capturedAt` and `periods`. A source has `reference`, `version` and a lowercase 64-character `sha256`. `capturedAt` is an explicit UTC ISO timestamp with milliseconds. Each period has `id`, `createdAt` (UTC ISO timestamp with milliseconds), `startDate`, `endDate`, `state`, `sourceFingerprint` and `rows`. Each row has `id`, `employeeId`, `state` and boolean `locked`. Period and row states are `draft`, `reviewed`, `approved` or `paid`. Dates are ordered civil dates. The supplied fingerprint should come from the retained full period/row export; the command reports it without claiming to verify the original snapshot. Amounts, names, bank details, snapshots and audit notes are deliberately absent from this input format.
+
+The population input has exactly `schemaVersion`, `datasetId`, `source` and `periods`. Each decision has `periodId`, `expectedEmployeeIds`, `unknownEmployeeIds`, `coverage`, `source` and `approval`. For a supplied expected set, including an empty array, coverage must be `partial` or `complete`, and source/approval references must be present. An approval has `reference`, `approvedBy` and `approvedAt` (UTC ISO timestamp with milliseconds). These fields record an external decision; they do not grant approval authority or prove that a real approval occurred. Expected and unknown IDs must be unique and disjoint.
+
+For unconfigured eligibility, use `expectedEmployeeIds: null`, `coverage: "unknown"`, `source: null` and `approval: null`. A payroll period omitted from the population manifest also remains unconfigured. Never turn a missing historical roster into an empty expected array. A decision referencing a period absent from the export is rejected.
+
+The report distinguishes matched IDs, missing explicitly expected IDs, unknown eligibility, stored IDs lacking an expected decision, duplicate stored account IDs, locked rows and workflow-state mismatches. A stored account without an expected decision is not classified as overpaid or removable. A matching expected set does not establish full historical completeness. Cross-period missing counts are account-period occurrences, not distinct people.
+
+The output includes file-byte hashes, canonical input hashes, per-period fact and decision hashes, source versions, supplied approval references and a deterministic report hash. These identify the compared evidence; they do not make files immutable or validate the originating roster. Preserve the original exports and report in an appropriately controlled evidence store. Corrected source evidence requires a fresh comparison and changes the hashes. Later roles, profile corrections and employment-period edits must not silently rewrite a historical expected set.
+
+The isolated MySQL fixture uses the exact pre-preservation `createPayrollPeriod` function from local commit `c8de51b9c1ae92f2a0ce44682f77c56295beb354` (full original controller SHA256 `bf221746226914465915e6b2c55ea0610477517cfea199efb01f5028b8036c61`) and the retained audited legacy HR-role fixture. It creates real old payroll periods before migration 71, reproduces an omitted profiled employee following employee-to-HR conversion, then restores membership under migration 71. The comparison still discovers the old omission in draft/reviewed/approved/paid periods. Missing-profile, inactive-login, ended/future/rehire-gap and unrelated-HR cases remain explicitly unresolved; no date or current-role eligibility inference is made. Paid/locked row facts and every payroll period remain unchanged during comparison and role reversal.
+
+The supplied test rosters and approval references are synthetic fixtures. They are not company eligibility decisions. Historical eligibility time basis, authoritative prior rosters/profile evidence, retroactivity and state-specific adjustment/reopening authority remain unresolved. There is no production data access, payroll run or repair acceptance in this change.

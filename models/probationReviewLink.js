@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('ProbationReviewLink',{caseId:{type:D.INTEGER,allowNull:false},userId:{type:D.INTEGER,allowNull:false},category:{type:D.STRING(12),allowNull:false}},{tableName:'probation_review_links',timestamps:false});

@@ -97,13 +97,13 @@ module.exports = (sequelize, DataTypes) => {
         },
       },
       role: {
-        type: DataTypes.ENUM("admin", "employee", "client", "manager"),
+        type: DataTypes.ENUM("admin", "employee", "client", "manager", "hr"),
         allowNull: false,
         defaultValue: "employee",
         validate: {
           isIn: {
-            args: [["admin", "employee", "client", "manager"]],
-            msg: "Invalid role. Must be admin, employee, client, or manager.",
+            args: [["admin", "employee", "client", "manager", "hr"]],
+            msg: "Invalid role. Must be admin, employee, client, manager, or hr.",
           },
         },
       },
@@ -118,6 +118,13 @@ module.exports = (sequelize, DataTypes) => {
           },
         },
       },
+      sessionVersion: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        defaultValue: 0,
+      },
+      hasEmployeeHistory: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      retainedEmployeeMembership: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       resetToken: {
         type: DataTypes.STRING,
         allowNull: true,
@@ -161,6 +168,7 @@ module.exports = (sequelize, DataTypes) => {
           }
         },
         beforeUpdate: async (user) => {
+          // Database trigger revokes sessions atomically for every mutation path.
           if (user.changed("password")) {
             user.password = await bcrypt.hash(user.password, 12);
             user.passwordChangedAt = new Date();

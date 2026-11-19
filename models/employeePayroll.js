@@ -28,13 +28,14 @@ module.exports = (sequelize, DataTypes) => {
         verifyIntegrity() {
             const crypto = require("crypto");
             if (!this.snapshot || !this.snapshot_hash) return false;
-            const currentHash = crypto.createHash("sha256").update(JSON.stringify(this.snapshot)).digest("hex");
+            const currentHash = this.snapshot.kind === "reviewed-attendance-v1" ? require("../utils/attendanceCalculationSources").hash(this.snapshot) : crypto.createHash("sha256").update(JSON.stringify(this.snapshot)).digest("hex");
             return currentHash === this.snapshot_hash;
         }
     }
 
     EmployeePayroll.init(
         {
+            currency: {type: DataTypes.STRING(3), allowNull: true, defaultValue: 'PKR', validate: {isIn: [['PKR']]}},
             payroll_period_id: {
                 type: DataTypes.INTEGER,
                 allowNull: false,
@@ -105,7 +106,7 @@ module.exports = (sequelize, DataTypes) => {
             scopes: {
                 full: { attributes: {} }, // Include everything
                 summary: {
-                    attributes: ["id", "employee_id", "payroll_period_id", "gross_salary", "total_deductions", "net_salary", "status", "locked", "snapshot"]
+                    attributes: ["id", "employee_id", "currency", "payroll_period_id", "gross_salary", "total_deductions", "net_salary", "status", "locked", "snapshot"]
                 }
             },
             hooks: {

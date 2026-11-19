@@ -1,0 +1,32 @@
+module.exports=m=>async(req,res)=>{
+ const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
+ const civil=s=>typeof s==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(s)&&s>='1000-01-01'&&s<='9999-12-31'&&Number.isFinite(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
+ res.setHeader('Cache-Control','private, no-store');
+ try{
+  const {from,to,after}=req.query;
+  if(Object.keys(req.query).some(k=>!['from','to','after'].includes(k))||!civil(from)||!civil(to)||from>to||after!==undefined&&(typeof after!=='string'||! /^(?:-[1-3]|[1-9]\d*)$/.test(after)||!Number.isSafeInteger(Number(after))||Number(after)>2147483647))fail(400,'Choose valid inclusive dates and a valid department-group cursor');
+  const span=(Date.parse(to)-Date.parse(from))/86400000+1;if(span>31)fail(400,'Choose at most 31 inclusive calendar dates');
+  const dates=Array.from({length:span},(_,i)=>new Date(Date.parse(from)+i*86400000).toISOString().slice(0,10));
+  const data=await m.sequelize.transaction({isolationLevel:'REPEATABLE READ'},async transaction=>{
+   const actor=await m.User.findByPk(req.user.id,{transaction,lock:transaction.LOCK.UPDATE});
+   if(!actor||req.user.role!=='admin'||actor.role!=='admin'||actor.status!=='active'||Number(actor.sessionVersion)!==Number(req.user.sessionVersion??0))fail(403,'Current administrator authorization required');
+   const groupKey='CASE WHEN a.id IS NULL THEN -3 WHEN a.departmentId IS NULL THEN -2 WHEN d.id IS NULL THEN -1 ELSE d.id END';
+   const org=' LEFT JOIN organization_assignments a ON a.employeeId=r.userId LEFT JOIN departments d ON d.id=a.departmentId';
+   const scope=" FROM leave_requests r"+org+" WHERE r.status='approved' AND r.startDate<=:to AND r.endDate>=:from";
+   const valid=scope+' AND r.startDate<=r.endDate';
+   const replacements={from,to,after:Number(after)||null,...Object.fromEntries(dates.map((date,i)=>['day'+i,date]))};
+   const opts={transaction,replacements};
+   const [[counts]]=await m.sequelize.query('SELECT COUNT(*) matchingApprovedRequests,COUNT(DISTINCT r.userId) distinctRecordedAccounts,COUNT(DISTINCT '+groupKey+') totalGroups,COALESCE(SUM(a.id IS NULL),0) unrecordedAssignmentRequests,COALESCE(SUM(a.id IS NOT NULL AND a.departmentId IS NULL),0) explicitlyUnassignedRequests,COALESCE(SUM(a.departmentId IS NOT NULL AND d.id IS NULL),0) missingDepartmentConfigRequests'+valid,opts);
+   const [[invalid]]=await m.sequelize.query('SELECT COUNT(*) invalidOverlappingApprovedRanges'+scope+' AND r.startDate>r.endDate',opts);
+   const [raw]=await m.sequelize.query('SELECT '+groupKey+' groupId,MAX(d.name) currentDepartmentName,MAX(d.isActive) currentDepartmentActive,COUNT(*) approvedRequests,COUNT(DISTINCT r.userId) distinctRecordedAccounts'+valid+' GROUP BY groupId'+(after?' HAVING groupId > :after':'')+' ORDER BY groupId LIMIT 51',opts);
+   const series=dates.map((_,i)=>'SELECT CAST(:day'+i+' AS DATE) day').join(' UNION ALL ');
+   const [daily]=await m.sequelize.query("SELECT DATE_FORMAT(days.day,'%Y-%m-%d') date,COUNT(r.id) approvedRequests,COUNT(DISTINCT r.userId) distinctRecordedAccounts FROM ("+series+") days LEFT JOIN leave_requests r ON r.status='approved' AND r.startDate<=days.day AND r.endDate>=days.day GROUP BY days.day ORDER BY days.day",opts);
+   const page=raw.slice(0,50),ids=page.map(r=>Number(r.groupId));
+   const [cells]=ids.length?await m.sequelize.query("SELECT "+groupKey+" groupId,DATE_FORMAT(days.day,'%Y-%m-%d') date,COUNT(*) approvedRequests,COUNT(DISTINCT r.userId) distinctRecordedAccounts FROM ("+series+") days JOIN leave_requests r ON r.status='approved' AND r.startDate<=days.day AND r.endDate>=days.day"+org+' WHERE '+groupKey+' IN (:groupIds) GROUP BY groupId,days.day',{transaction,replacements:{...replacements,groupIds:ids}}):[[]];
+   const rows=page.map(r=>({...r,groupId:Number(r.groupId),currentDepartmentActive:r.currentDepartmentActive===null?null:Boolean(Number(r.currentDepartmentActive)),approvedRequests:Number(r.approvedRequests),distinctRecordedAccounts:Number(r.distinctRecordedAccounts),assignmentState:Number(r.groupId)===-3?'unrecorded':Number(r.groupId)===-2?'explicitly-unassigned':Number(r.groupId)===-1?'missing-configuration':'assigned',daily:Object.fromEntries(cells.filter(c=>Number(c.groupId)===Number(r.groupId)).map(c=>[c.date,{approvedRequests:Number(c.approvedRequests),distinctRecordedAccounts:Number(c.distinctRecordedAccounts)}]))}));
+   return{from,to,dates,counts:Object.fromEntries(Object.entries({...counts,...invalid}).map(([k,v])=>[k,Number(v)])),daily:daily.map(r=>({...r,approvedRequests:Number(r.approvedRequests),distinctRecordedAccounts:Number(r.distinctRecordedAccounts)})),rows,hasMore:raw.length>50,pageRowCount:rows.length,basis:'Current approved leave-request ranges overlapping up to 31 selected inclusive civil calendar dates. Each request counts once for range totals and once per overlapping date. Distinct recorded account IDs count once per range/group/date respectively, even when requests overlap. Daily counts must not be added as a unique-person or request total.',context:'Grouping uses current explicit organization assignments and current department names/archive state, not the department held on a request date. Missing assignment, explicit clear and missing configuration are separate groups; legacy profile department text is not inferred. Groups without matching approved requests are omitted. Missing daily cells in a returned group mean zero matches. Global totals and daily counts cover all groups, independent of paging.',limitations:'These are approved request overlaps, not working days, charged leave, utilization, balances, actual absence or workforce leave-today eligibility. Present account role/status/employment and leave-type payment settings do not reselect stored approved requests. Full/half-day records each count as one request, not a day fraction. Invalid reversed ranges are excluded and counted when their stored bounds overlap the selection. Individual identities, reasons and private request details are omitted. Current edits or approval changes can change results; later pages use fresh snapshots. No source writes, calendar policy, reminders or historic department reconstruction.',generatedAt:new Date().toISOString()};
+  });
+  return res.json({success:true,data});
+ }catch(e){return res.status(Number.isInteger(e.code)?e.code:500).json({success:false,message:Number.isInteger(e.code)?e.message:'Approved leave calendar unavailable'});}
+};
+

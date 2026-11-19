@@ -1,0 +1,16 @@
+const m=require('../models'),{civil}=require('../utils/organizationTarget');
+const fail=(code,message)=>{throw Object.assign(Error(message),{code});};
+exports.read=async(req,res)=>{try{
+ const q=req.query;if(Object.keys(q).some(k=>!['asOf','search','before'].includes(k))||!civil(q.asOf)||q.search!==undefined&&(typeof q.search!=='string'||q.search.length>100)||q.before!==undefined&&(typeof q.before!=='string'||!/^\d+$/.test(q.before)||!Number.isSafeInteger(Number(q.before))||Number(q.before)<1))fail(400,'Choose a valid employment date, search and cursor');
+ const params={asOf:q.asOf,search:q.search?.trim()||'',before:q.before?Number(q.before):null};
+ const data=await m.sequelize.transaction({isolationLevel:'REPEATABLE READ',readOnly:true},async t=>{
+  const membership="EXISTS (SELECT 1 FROM employment_periods p WHERE p.employeeId=u.id AND p.voided=0 AND p.version>0 AND p.startDate>='1000-01-01' AND p.startDate<=:asOf AND (p.endDate IS NULL OR p.endDate>=:asOf) AND (p.endDate IS NULL OR p.endDate>=p.startDate))";
+  const from=' FROM users u LEFT JOIN organization_assignments a ON a.employeeId=u.id LEFT JOIN departments d ON d.id=a.departmentId LEFT JOIN designation_categories g ON g.id=a.designationId LEFT JOIN official_manager_sets s ON s.employeeId=u.id ';
+  const where=membership+" AND (:search = '' OR LOCATE(:search,u.fullName)>0 OR LOCATE(:search,u.email)>0 OR LOCATE(:search,d.name)>0 OR LOCATE(:search,COALESCE(g.name,a.designation))>0)";
+  const [[coverage]]=await m.sequelize.query('SELECT COUNT(*) total,COALESCE(SUM(a.departmentId IS NOT NULL),0) withDepartment,COALESCE(SUM(a.designationId IS NOT NULL OR a.designation IS NOT NULL),0) withDesignation,COALESCE(SUM(s.id IS NOT NULL),0) withOfficialSet'+from+'WHERE '+where,{replacements:params,transaction:t});
+  const [allRows]=await m.sequelize.query('SELECT u.id,u.fullName,u.email,u.role,u.status,a.departmentId,d.name departmentName,d.isActive departmentActive,a.designationId,COALESCE(g.name,a.designation) designation,g.isActive designationActive,a.managerId primaryReferenceId,a.version organizationVersion,s.managerIds,s.version reportingSetVersion'+from+'WHERE '+where+' AND (:before IS NULL OR u.id < :before) ORDER BY u.id DESC LIMIT 26',{replacements:params,transaction:t});
+  const rows=allRows.slice(0,25);for(const row of rows){if(typeof row.managerIds==='string')row.managerIds=JSON.parse(row.managerIds);if(row.managerIds!==null&&!Array.isArray(row.managerIds))fail(503,'Official reporting source requires review');}
+  const ids=[...new Set(rows.flatMap(r=>r.managerIds||[]))],people=ids.length?await m.User.findAll({where:{id:ids},attributes:['id','fullName','email','role','status'],transaction:t}):[];
+  return{asOf:q.asOf,search:params.search,rows,people,hasMore:allRows.length>25,nextBefore:allRows.length>25?rows.at(-1).id:null,coverage:Object.fromEntries(Object.entries(coverage).map(([k,v])=>[k,Number(v)])),scope:'Recorded employment covering selected date; current organization and reporting references. Account email is the contact source. No historical organization inference.'};
+ });return res.json({success:true,data});
+ }catch(e){if(Number.isInteger(e.code))return res.status(e.code).json({message:e.message});console.error('Workforce directory unavailable',e.name);return res.status(500).json({message:'Workforce directory unavailable'});}};

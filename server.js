@@ -20,10 +20,7 @@ const socketIo = require('socket.io');
 const server = http.createServer(app);
 
 // Request Logging Middleware
-app.use((req, res, next) => {
-  logger.info(`${req.method} ${req.originalUrl}`);
-  next();
-});
+app.use(require('./middleware/requestLogger')(logger));
 
 // Initialize Socket.IO
 const io = socketIo(server, {
@@ -41,29 +38,7 @@ const io = socketIo(server, {
 });
 
 // Middleware
-const allowedOrigins = [
-  "http://localhost:3000",
-  "http://127.0.0.1:3000",
-  "http://localhost:3001",
-  "http://127.0.0.1:3001",
-  process.env.FRONTEND_URL,
-  "https://human-resource-management-production-eeeb.up.railway.app",
-  "https://human-resource-management-production-b7d0.up.railway.app"
-].filter(Boolean);
-
-app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      logger.warn(`Blocked by CORS: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-  allowedHeaders: "Content-Type, Authorization, X-Requested-With"
-}));
+app.use(cors(require('./config/corsPolicy')(process.env, () => logger.warn('Blocked by CORS'))));
 
 // Use Helmet for security headers, but allow images from same origin
 app.use(helmet({
@@ -73,7 +48,7 @@ app.use(compression()); // Gzip compression
 app.use(express.json());
 
 // Cache Control Headers for Static Assets
-app.use('/uploads', (req, res, next) => {
+app.use('/uploads', require('./middleware/legacyUploads'), (req, res, next) => {
   res.setHeader('Cache-Control', 'public, max-age=86400'); // Cache for 1 day
   next();
 }, express.static(path.join(__dirname, 'uploads')));
@@ -96,19 +71,7 @@ app.use((err, req, res, next) => {
 app.set('io', io);
 
 // Socket.IO connection handling
-io.on('connection', (socket) => {
-  // logger.info(`User connected: ${socket.id}`);
-
-  // Join user room for notifications
-  socket.on('join', (userId) => {
-    socket.join(`user_${userId}`);
-    // logger.info(`User ${userId} joined room user_${userId}`);
-  });
-
-  socket.on('disconnect', () => {
-    // logger.info(`User disconnected: ${socket.id}`);
-  });
-});
+require('./utils/realtimeAccess').configureRealtimeAccess(io);
 
 // Test Database Connection
 
@@ -122,6 +85,7 @@ app.get('/', (req, res) => {
 
 const { ensureSchema } = require('./utils/schemaFix');
 const CronJobs = require('./utils/cronJobs');
+const runtimeSafety = require('./config/runtimeSafety');
 
 (async () => {
   try {
@@ -129,13 +93,13 @@ const CronJobs = require('./utils/cronJobs');
     logger.info("✅ Connected to MySQL database: hrm");
 
     // Run schema fix before starting server to ensure DB is ready
-    await ensureSchema();
+    if (runtimeSafety.startupSchemaRepairEnabled) await ensureSchema();
 
     server.listen(PORT, '0.0.0.0', () => {
       logger.info(`✅ Server running on port ${PORT}`);
 
       // Initialize cron jobs after server starts
-      CronJobs.init(io);
+      if (runtimeSafety.backgroundJobsEnabled) CronJobs.init(io);
     });
   } catch (error) {
     logger.error("❌ Database connection failed:", error);

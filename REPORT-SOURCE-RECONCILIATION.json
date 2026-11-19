@@ -1,0 +1,188 @@
+{
+  "date": "2026-11-09",
+  "sources": [
+    {
+      "basis": "Recorded endDate inclusively within explicit from/to dates, all recorded statuses. Status/start/evaluation/decision dates shown. No automatic upcoming cutoff or official confirmation.",
+      "model": "probation_cases",
+      "source": "probation",
+      "requirements": [
+        "DOC-008",
+        "DOC-013",
+        "DOC-151",
+        "DOC-152"
+      ]
+    },
+    {
+      "basis": "Current explicit assignment rows whose last saved timestamp falls in selected UTC dates. Current department/category and retained assignment label shown. Not historical as-of structure, department headcount, workforce population, or all events in range.",
+      "model": "organization_assignments",
+      "source": "organization",
+      "requirements": [
+        "DOC-024",
+        "DOC-047",
+        "DOC-155",
+        "DOC-156"
+      ]
+    },
+    {
+      "basis": "Recorded evaluation interval overlaps date range; answered/total form questions and feedback entries. No rating/outcome aggregates.",
+      "model": "performance_evaluations",
+      "source": "performance",
+      "requirements": [
+        "DOC-153",
+        "DOC-154"
+      ]
+    },
+    {
+      "basis": "Recorded training interval overlaps range; unique attended dates per record inside dates. No cross-course credit/pass/certification.",
+      "model": "training_records",
+      "source": "training",
+      "requirements": [
+        "DOC-162"
+      ]
+    },
+    {
+      "basis": "Manually reported lastWorkingDate in range. Global undated cases shown separately. Not actual exits/turnover.",
+      "model": "offboarding_cases",
+      "source": "offboarding",
+      "requirements": [
+        "DOC-150"
+      ]
+    },
+    {
+      "basis": "Assignment created in UTC range; current explicit read/ack timestamps for exact revision. No legal acknowledgement conclusion.",
+      "model": "policy_assignments",
+      "source": "policy-receipts",
+      "requirements": [
+        "DOC-117",
+        "DOC-118",
+        "DOC-119",
+        "DOC-122",
+        "DOC-123",
+        "DOC-124"
+      ]
+    },
+    {
+      "requirements": [
+        "DOC-016",
+        "DOC-126",
+        "DOC-128",
+        "DOC-129",
+        "DOC-132",
+        "DOC-133"
+      ],
+      "model": "hr_tasks",
+      "basis": "Current task rows with dueDate inclusively in explicit selected dates, across all statuses. Current submission/approval metadata; not historical-as-of pending, overdue or all-task totals. Global undated count explicitly separate.",
+      "source": "hr-tasks"
+    },
+    {
+      "requirements": [
+        "DOC-129",
+        "DOC-132",
+        "DOC-134"
+      ],
+      "model": "hr_task_events",
+      "basis": "Retained submit/approve events created inside selected UTC dates. Original actor name, before/after status, task title and version retained; one event per row, not unique task count or current approval queue. Account/context resolves from assignee retained in event; names/context from current directory disclosed separately. No private note/reason/hash/payload.",
+      "source": "hr-task-decisions"
+    },
+    {
+      "requirements": [
+        "DOC-017",
+        "DOC-096",
+        "DOC-099",
+        "DOC-103",
+        "DOC-113"
+      ],
+      "model": "hr_letter_drafts",
+      "basis": "Current retained draft metadata with explicit documentDate inclusively in selected dates. Original template ID/version retained despite later template edit. Draft only; no issued/signed/delivered/pending-contract status or document content included.",
+      "source": "letter-drafts"
+    },
+    {
+      "endpoint": "/onboarding-record-report?source=cases",
+      "requirements": [
+        "DOC-049",
+        "DOC-130"
+      ],
+      "source": "onboarding-cases",
+      "model": "onboarding_cases",
+      "basis": "Checklist records created in explicit UTC inclusive dates. Current case/status/version and all current child pending/completed/waived/undated/unassigned counts, regardless of child deadlines. Not employment joining or workforce membership."
+    },
+    {
+      "endpoint": "/onboarding-record-report?source=items",
+      "requirements": [
+        "DOC-049",
+        "DOC-130"
+      ],
+      "source": "onboarding-items",
+      "model": "onboarding_items",
+      "basis": "Current checklist items with recorded dueDate in inclusive civil dates/all statuses, independent of case creation cohort. Current account/case/responsible context; undated count global and separate. Not employee eligibility/access/pay/confirmation."
+    },
+    {
+      "model": "offboarding_cases",
+      "requirements": [
+        "DOC-105",
+        "DOC-106",
+        "DOC-107",
+        "DOC-108",
+        "DOC-109",
+        "DOC-110",
+        "DOC-111",
+        "DOC-130",
+        "DOC-150"
+      ],
+      "source": "offboarding-cases",
+      "basis": "Cases created inside explicit UTC dates, with current manually reported dates/status and all current clearance/asset-return child counts regardless deadlines. Not actual exit/turnover/settlement or inventory reconciliation.",
+      "endpoint": "/offboarding-record-report?source=cases"
+    },
+    {
+      "model": "offboarding_items",
+      "requirements": [
+        "DOC-109",
+        "DOC-110",
+        "DOC-111",
+        "DOC-130"
+      ],
+      "source": "offboarding-items",
+      "basis": "Current clearance/asset-return items whose dueDate is in inclusive civil dates, independent of case creation or reported last-working date; current kind/status/archived department/responsible metadata; page-local missing and global undated items separated. No physical inventory, pay/access/termination effects.",
+      "endpoint": "/offboarding-record-report?source=items"
+    }
+  ],
+  "unresolved": [
+    {
+      "requirements": [
+        "DOC-003",
+        "DOC-004",
+        "DOC-005",
+        "DOC-006",
+        "DOC-007",
+        "DOC-009",
+        "DOC-139",
+        "DOC-140"
+      ],
+      "dependency": "Authorized workforce population, employment episodes, lifecycle/status/joining definitions required."
+    },
+    {
+      "requirements": [
+        "DOC-018",
+        "DOC-149"
+      ],
+      "dependency": "Actual employment exits and denominator/date/population rules required; manual offboarding is not turnover."
+    },
+    {
+      "requirements": [
+        "DOC-141",
+        "DOC-142",
+        "DOC-143",
+        "DOC-144",
+        "DOC-145",
+        "DOC-146",
+        "DOC-157",
+        "DOC-158",
+        "DOC-159",
+        "DOC-160"
+      ],
+      "dependency": "Existing raw attendance/export/explicit leave/salary history remain bounded. Work calendars, working-day/paid/payroll/currency/tax/approval definitions and reconciled sources required for derived totals."
+    }
+  ],
+  "context": "Current organization context at report generation for every row, never backcast to source dates. Missing assignment/department/category/evaluation-date counts describe only latest fetched page; row count disclosed. Not recorded remains explicit. Task decision context uses the assignee ID retained in that event; current account/organization names never overwrite recorded actor/title/status facts. Fresh per-request snapshots may change across later pages; not an immutable export.",
+  "scope": "Nine hub + two onboarding + two offboarding retained source projections; bounded draft sources only, not workforce/lifecycle/financial/issued-document/physical-inventory acceptance. Latest offboarding source scope independent QA pending."
+}

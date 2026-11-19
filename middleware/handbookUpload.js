@@ -1,0 +1,3 @@
+const multer=require('multer');
+const parse=multer({storage:multer.memoryStorage(),limits:{fileSize:20*1024*1024,files:1,fields:1,parts:3,fieldSize:60000}}).single('file');
+module.exports=(req,res,next)=>parse(req,res,error=>{if(error)return res.status(error.code==='LIMIT_FILE_SIZE'?413:400).json({success:false,message:'One PDF up to20 MiB and one command field required'});try{if(Object.keys(req.body).length!==1||typeof req.body.command!=='string')throw Error();req.body=JSON.parse(req.body.command);if(!req.file)throw Error();return next();}catch{return res.status(400).json({success:false,message:'PDF file and valid command required'});}});

@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('EmployeeDocumentDraft',{employeeId:{type:D.INTEGER,allowNull:false},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'employee_document_drafts'});

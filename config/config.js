@@ -36,12 +36,13 @@ const getBoolean = (val, def = false) => {
 };
 
 const DB_URL = process.env.DATABASE_URL || process.env.DB_URL || null;
+const DB_URL_VARIABLE = process.env.DATABASE_URL ? 'DATABASE_URL' : 'DB_URL';
 const DB_SSL = getBoolean(process.env.DB_SSL, false);
 
 // Common database URL configuration if provided
 const dbUrlConfig = DB_URL
   ? {
-    use_env_variable: 'DATABASE_URL',
+    use_env_variable: DB_URL_VARIABLE,
     dialect: "mysql",
     dialectOptions: DB_SSL
       ? {
@@ -74,9 +75,9 @@ module.exports = {
     dialect: "mysql",
   },
   production: (() => {
-    if (process.env.DATABASE_URL) {
+    if (DB_URL) {
       return {
-        use_env_variable: 'DATABASE_URL',
+        ...dbUrlConfig,
         dialect: 'mysql',
       };
     }

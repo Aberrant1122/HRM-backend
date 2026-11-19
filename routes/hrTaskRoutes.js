@@ -1,0 +1,13 @@
+const router=require('express').Router(),{isAdmin}=require('../middleware/authMiddleware'),models=require('../models'),c=require('../controllers/hrTaskController')(models),p=require('../controllers/hrTaskParticipation')(models);
+router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});
+const notices=require('../controllers/hrTaskNoticeController')(models,c);
+router.get('/notices',notices.list);router.post('/notices/:id/read',notices.read);
+router.get('/access',p.access);router.get('/mine',p.mineList);router.get('/mine/:taskId',p.mineRead);router.post('/mine/commands',p.submit);
+router.get('/review',p.reviewList);router.get('/review/:taskId',p.reviewRead);router.post('/review/commands',p.approve);
+router.use(isAdmin);router.get('/approval-accounts',p.permissionAccounts);router.post('/notices',notices.send);router.get('/approval-permissions/:userId',p.permissionRead);router.post('/approval-permissions/commands',p.permissionCommand);
+const reminders=require('../controllers/hrReminderController');
+router.get('/reminders',reminders.list);router.post('/reminders',reminders.write);
+router.post('/checklist/:kind/:itemId',require('../controllers/assignChecklistTask')(models,c));
+const stageDates=require('../controllers/hrTaskDeadlines').controller(models,c);
+router.route('/:taskId/deadlines').get(stageDates).post(stageDates);
+router.get('/',c.list);router.get('/:taskId',c.read);router.post('/commands',c.command);module.exports=router;

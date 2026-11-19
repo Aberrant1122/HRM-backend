@@ -1,0 +1,3 @@
+const router=require('express').Router(),{isAdmin}=require('../middleware/authMiddleware'),c=require('../controllers/probationDecisionController')(require('../models'));
+router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});router.use(require('../controllers/confirmationPlanRoutes')(require('../models')));router.get('/access',c.own);router.get('/employee/:employeeId',c.read);router.post('/employee/:employeeId/commands',c.command);
+router.use(isAdmin);router.get('/accounts',c.accounts);router.get('/permissions/:userId/:employeeId',c.permissionRead);router.post('/permissions/commands',c.permissionCommand);module.exports=router;

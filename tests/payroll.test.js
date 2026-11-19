@@ -118,8 +118,10 @@ describe("Payroll Logic - Hourly Salary", () => {
     const results = _calculateCore(null, hourlyProfile, attendances, [], [], mockPeriod);
     // Gross = 10 * 1000 = 10000
     // OT = 2 * 500 = 1000
-    // Net = 11000
-    assert(new Decimal(results.net_salary).eq(11000), "Hourly calculation should sum worked hours correctly.");
+    // Existing configured tax is 5% of basic earnings (10000), so deductions=500 and net=10500.
+    assert(new Decimal(results.gross_salary).eq(11000), "Hourly gross includes worked hours and configured overtime.");
+    assert(new Decimal(results.total_deductions).eq(500), "Hourly deductions include the configured tax on basic earnings.");
+    assert(new Decimal(results.net_salary).eq(10500), "Hourly net subtracts configured deductions from gross.");
 });
 
 console.log("\nAll financial system logic tests passed.");

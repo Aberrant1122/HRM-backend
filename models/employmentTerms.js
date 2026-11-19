@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('EmploymentTerms',{employeeId:{type:D.INTEGER,allowNull:false,unique:true},statusLabel:{type:D.STRING(100),allowNull:true},typeLabel:{type:D.STRING(100),allowNull:true},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'employment_terms'});
