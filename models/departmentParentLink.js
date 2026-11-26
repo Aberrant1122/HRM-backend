@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('DepartmentParentLink',{departmentId:{type:D.INTEGER,allowNull:false},parentDepartmentId:{type:D.INTEGER,allowNull:false}},{tableName:'department_parent_links',timestamps:false});

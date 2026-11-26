@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('HrLetterTemplate',{name:{type:D.STRING(200),allowNull:false},kind:{type:D.STRING(40),allowNull:false},body:{type:D.TEXT('medium'),allowNull:false},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'hr_letter_templates'});

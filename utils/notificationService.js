@@ -1,3 +1,4 @@
+const { emitToUser } = require('./realtimeAccess');
 const { Notification, User, Project } = require('../models');
 
 class NotificationService {
@@ -26,7 +27,7 @@ class NotificationService {
 
       // Emit real-time notification via Socket.IO
       if (io) {
-        io.to(`user_${data.userId}`).emit('notification', {
+        await emitToUser(io, data.userId, 'notification', {
           id: notification.id,
           message: notification.message,
           type: notification.type,

@@ -7,10 +7,8 @@ const { body, validationResult } = require("express-validator");
 const nodemailer = require("nodemailer");
 
 // Load environment variables
-const JWT_SECRET_KEY = process.env.JWT_SECRET_KEY || "your_secret_key";
-const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "gmail";
+const JWT_SECRET_KEY = require("../config/jwtSecret");
 const EMAIL_USER = process.env.EMAIL_USER || "";
-const EMAIL_PASS = process.env.EMAIL_PASS || "";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 const getAppUrl = (req) => {
@@ -31,13 +29,7 @@ const getAppUrl = (req) => {
 };
 
 // Email transporter
-const transporter = nodemailer.createTransport({
-  service: EMAIL_SERVICE,
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  },
-});
+const transporter = nodemailer.createTransport(require("../config/runtimeSafety").mailOptions());
 
 // Middleware for validation rules
 const validateInviteEmployee = [
@@ -78,6 +70,89 @@ const validateRegister = [
     .withMessage("Invalid role"),
 ];
 
+async function createInvitedAccount(fields, transaction) {
+  const {fullName, email, role, cnic, contactNumber} = fields;
+  // Generate a random password reset token
+  const resetToken = crypto.randomBytes(32).toString("hex");
+  const resetTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+
+  // Create new user
+  const tempPassword = crypto.randomBytes(8).toString("hex");
+  const hashedPassword = await bcrypt.hash(tempPassword, 10);
+
+  const newUser = await User.create(
+    {
+      fullName,
+      email,
+      password: hashedPassword,
+      role,
+      resetToken,
+      resetTokenExpiry,
+      status: "inactive",
+    },
+    { transaction }
+  );
+
+  // Create UserInfo for the new user
+  await UserInfo.create(
+    {
+      userId: newUser.id,
+      cnic: cnic || null,
+      contactNumber: contactNumber,
+      address: fields.address || null,
+      department: fields.department || "development",
+      probationEndDate: fields.probationEndDate
+        ? new Date(fields.probationEndDate)
+        : null,
+      employmentStatus: fields.employmentStatus || "permanent",
+      salary: fields.salary || 0,
+      position: fields.position || fields.designation || "Developer",
+      team: fields.team || null,
+      reportingManager: fields.reportingManager || null,
+      dob: fields.dob ? new Date(fields.dob) : null,
+      startDate: fields.startDate ? new Date(fields.startDate) : null,
+    },
+    { transaction }
+  );
+
+  return {newUser, resetToken};
+}
+
+async function sendInvitation(req, fields, resetToken) {
+  const {role, email} = fields;
+  const fullName = String(fields.fullName).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const baseUrl = getAppUrl(req);
+  const resetUrl = `${baseUrl}/set-password?token=${resetToken}`;
+  await transporter.sendMail({
+    to: email,
+    subject: "Welcome to our HRM System - Account Invitation",
+    html: `
+      <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+        <div style="background-color: #2563eb; padding: 25px; text-align: center;">
+          <h1 style="color: white; margin: 0; font-size: 24px;">Account Invitation</h1>
+        </div>
+        <div style="padding: 30px;">
+          <p>Hello <strong>${fullName}</strong>,</p>
+          <p>You have been officially invited to join our HRM system as a <strong>${role}</strong>.</p>
+          <p>To get started and activate your account, please set your password by clicking the button below:</p>
+          <div style="text-align: center; margin: 30px 0;">
+            <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Set Your Password</a>
+          </div>
+          <p style="font-size: 0.9em; color: #666;"><strong>Note:</strong> This invitation link will expire in 24 hours.</p>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;" />
+          <p style="font-size: 0.9em;">Once your password is set, you can access your dashboard anytime at:</p>
+          <p style="background-color: #f3f4f6; padding: 10px; border-radius: 4px; text-align: center;">
+            <a href="${baseUrl}/" style="color: #2563eb; text-decoration: none; font-weight: 500;">Go to Portal</a>
+          </p>
+        </div>
+        <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 0.8em; color: #9ca3af;">
+          &copy; ${new Date().getFullYear()} HRM System. All rights reserved.
+        </div>
+      </div>
+    `,
+  });
+}
+
 // Controller for inviting a new employee (Admin only)
 const inviteEmployee = async (req, res) => {
   // Check if user is admin
@@ -112,84 +187,13 @@ const inviteEmployee = async (req, res) => {
         .json({ message: "User with this email already exists" });
     }
 
-    // Generate a random password reset token
-    const resetToken = crypto.randomBytes(32).toString("hex");
-    const resetTokenExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
-
-    // Create new user
-    const tempPassword = crypto.randomBytes(8).toString("hex");
-    const hashedPassword = await bcrypt.hash(tempPassword, 10);
-
-    const newUser = await User.create(
-      {
-        fullName,
-        email,
-        password: hashedPassword,
-        role,
-        resetToken,
-        resetTokenExpiry,
-        status: "inactive",
-      },
-      { transaction }
-    );
-
-    // Create UserInfo for the new user
-    await UserInfo.create(
-      {
-        userId: newUser.id,
-        cnic: cnic || null,
-        contactNumber: contactNumber,
-        address: req.body.address || null,
-        department: req.body.department || "development",
-        probationEndDate: req.body.probationEndDate
-          ? new Date(req.body.probationEndDate)
-          : null,
-        employmentStatus: req.body.employmentStatus || "permanent",
-        salary: req.body.salary || 0,
-        position: req.body.position || req.body.designation || "Developer",
-        team: req.body.team || null,
-        reportingManager: req.body.reportingManager || null,
-        dob: req.body.dob ? new Date(req.body.dob) : null,
-        startDate: req.body.startDate ? new Date(req.body.startDate) : null,
-      },
-      { transaction }
-    );
-
+    const {newUser, resetToken} = await createInvitedAccount(req.body, transaction);
     // If we got here, commit the transaction
     await transaction.commit();
 
     // Send invitation email (outside of transaction)
     try {
-      const baseUrl = getAppUrl(req);
-      const resetUrl = `${baseUrl}/set-password?token=${resetToken}`;
-      await transporter.sendMail({
-        to: email,
-        subject: "Welcome to our HRM System - Account Invitation",
-        html: `
-          <div style="font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
-            <div style="background-color: #2563eb; padding: 25px; text-align: center;">
-              <h1 style="color: white; margin: 0; font-size: 24px;">Account Invitation</h1>
-            </div>
-            <div style="padding: 30px;">
-              <p>Hello <strong>${fullName}</strong>,</p>
-              <p>You have been officially invited to join our HRM system as a <strong>${role}</strong>.</p>
-              <p>To get started and activate your account, please set your password by clicking the button below:</p>
-              <div style="text-align: center; margin: 30px 0;">
-                <a href="${resetUrl}" style="background-color: #2563eb; color: white; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Set Your Password</a>
-              </div>
-              <p style="font-size: 0.9em; color: #666;"><strong>Note:</strong> This invitation link will expire in 24 hours.</p>
-              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 25px 0;" />
-              <p style="font-size: 0.9em;">Once your password is set, you can access your dashboard anytime at:</p>
-              <p style="background-color: #f3f4f6; padding: 10px; border-radius: 4px; text-align: center;">
-                <a href="https://human-resource-management-production-b7d0.up.railway.app/" style="color: #2563eb; text-decoration: none; font-weight: 500;">Go to Portal</a>
-              </p>
-            </div>
-            <div style="background-color: #f9fafb; padding: 15px; text-align: center; font-size: 0.8em; color: #9ca3af;">
-              &copy; ${new Date().getFullYear()} HRM System. All rights reserved.
-            </div>
-          </div>
-        `,
-      });
+      await sendInvitation(req, req.body, resetToken);
     } catch (emailError) {
       console.error("Failed to send email:", emailError);
       // Don't fail the request if email fails
@@ -284,6 +288,7 @@ const login = async (req, res) => {
         id: user.id,
         role: user.role,
         email: user.email,
+        sessionVersion: user.sessionVersion,
       },
       JWT_SECRET_KEY,
       { expiresIn: "8h" }
@@ -311,24 +316,7 @@ const login = async (req, res) => {
 };
 
 // Middleware to check if user is authenticated
-const isAuthenticated = (req, res, next) => {
-  try {
-    const token = req.header("Authorization")?.replace("Bearer ", "");
-
-    if (!token) {
-      return res
-        .status(401)
-        .json({ message: "No token, authorization denied" });
-    }
-
-    const decoded = jwt.verify(token, JWT_SECRET_KEY);
-    req.user = decoded;
-    next();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    res.status(401).json({ message: "Token is not valid" });
-  }
-};
+const { authenticate: isAuthenticated } = require("../middleware/authMiddleware");
 
 // Middleware to check if user has admin role
 const isAdmin = (req, res, next) => {
@@ -542,6 +530,7 @@ const checkIsProjectManager = async (req, res) => {
   try {
     const userId = req.user.id;
     const userRole = req.user.role?.toLowerCase?.() || req.user.role;
+    if (userRole === 'hr') return res.json({ success: true, isProjectManager: false, role: userRole, managedProject: null });
 
     // If user already has manager or admin role, return true
     if (userRole === "manager" || userRole === "admin") {
@@ -582,6 +571,8 @@ const checkIsProjectManager = async (req, res) => {
 };
 
 module.exports = {
+  createInvitedAccount,
+  sendInvitation,
   inviteEmployee,
   login,
   setPassword,

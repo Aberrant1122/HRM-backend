@@ -16,21 +16,27 @@ if (!PayrollAdjustment) {
 }
 
 const createPayrollPeriod = async (req, res) => {
-    const transaction = await sequelize.transaction();
+    res.setHeader('Cache-Control','private, no-store');
+    if (req.body.currency !== undefined && req.body.currency !== 'PKR') return res.status(400).json({success:false,message:'New payroll periods use PKR'});
+    const transaction = await sequelize.transaction({ isolationLevel: 'REPEATABLE READ' });
 
     try {
         const { name, startDate, endDate, payrollType } = req.body;
 
         // 1. Validate Input
         if (!name || !startDate || !endDate || !payrollType) {
+            await transaction.rollback();
             return res.status(400).json({
                 success: false,
                 message: "Please provide all required fields: name, startDate, endDate, payrollType",
             });
         }
 
+        await require('../utils/reviewedPayrollGuard').actor(db,req.user,transaction);
+
         // 2. Check for overlapping payroll periods
         const overlappingPeriod = await PayrollPeriod.findOne({
+            transaction,
             where: {
                 [Op.or]: [
                     {
@@ -74,82 +80,15 @@ const createPayrollPeriod = async (req, res) => {
             { transaction }
         );
 
-        // 4. Fetch all active employees
-        const employees = await User.findAll({
-            where: {
-                role: "employee",
-                status: "active",
-            },
-            include: [
-                {
-                    model: PayrollProfile,
-                    as: "payrollProfile",
-                },
-            ],
-        });
-
-        if (employees.length === 0) {
-            await transaction.rollback();
-            return res.status(400).json({
-                success: false,
-                message: "No active employees found to process payroll.",
-            });
-        }
-
-        // 5. Filter employees with payroll profiles
-        const employeesWithProfile = employees.filter((emp) => emp.payrollProfile);
-        const employeesWithoutProfile = employees.filter((emp) => !emp.payrollProfile);
-
-        if (employeesWithProfile.length === 0) {
-            await transaction.rollback();
-            return res.status(400).json({
-                success: false,
-                message: "No employees with payroll profiles found. Please create payroll profiles before generating payroll.",
-            });
-        }
-
-        // Log warning about skipped employees
-        if (employeesWithoutProfile.length > 0) {
-            const skippedNames = employeesWithoutProfile.map((emp) => emp.fullName).join(", ");
-            console.warn(`⚠️ Skipping employees without payroll profiles: ${skippedNames}`);
-        }
-
-        // 6. Create employee_payroll rows only for employees with profiles
-        const employeePayrolls = employeesWithProfile.map((emp) => ({
-            payroll_period_id: payrollPeriod.id,
-            employee_id: emp.id,
-            gross_salary: 0,
-            total_deductions: 0,
-            net_salary: 0,
-            snapshot: {},
-            status: "draft",
-            locked: false,
-        }));
-
-        await EmployeePayroll.bulkCreate(employeePayrolls, {
-            transaction,
-            fields: ["payroll_period_id", "employee_id", "gross_salary", "total_deductions", "net_salary", "snapshot", "status", "locked"]
-        });
-
+        // Membership is explicit per reviewed run; an empty period never infers eligibility from login roles.
         await transaction.commit();
-
-        const response = {
-            success: true,
-            message: "Payroll period generated successfully",
-            data: {
-                payrollPeriod,
-                total_employees_processed: employeesWithProfile.length,
-            },
-        };
-
-        // Add warning about skipped employees if any
-        if (employeesWithoutProfile.length > 0) {
-            response.warning = `${employeesWithoutProfile.length} employee(s) skipped due to missing payroll profiles: ${employeesWithoutProfile.map(e => e.fullName).join(", ")}`;
-        }
+        const response = {success:true,message:"Empty draft period created; add explicitly selected reviewed attendance runs",data:{payrollPeriod,total_employees_processed:0,populationScope:{basis:'explicit-reviewed-run',selectedAccounts:0}}};
 
         return res.status(201).json(response);
     } catch (error) {
         if (transaction) await transaction.rollback();
+        if (error.code===409) return res.status(409).json({success:false,message:error.message});
+        if (error.status) return res.status(error.status).json({success:false,message:error.message,code:error.code,review:error.review});
         console.error("Error generating payroll period:", error);
         return res.status(500).json({
             success: false,
@@ -174,7 +113,7 @@ const calculatePayroll = async (req, res) => {
         });
     } catch (error) {
         console.error("Error calculating payroll:", error);
-        return res.status(400).json({
+        return res.status(Number.isInteger(error.code)?error.code:400).json({
             success: false,
             message: error.message || "Failed to calculate payroll",
         });
@@ -199,7 +138,7 @@ const bulkCalculatePayroll = async (req, res) => {
 
     } catch (error) {
         console.error("Error bulk calculating payroll:", error);
-        return res.status(400).json({
+        return res.status(Number.isInteger(error.code)?error.code:400).json({
             success: false,
             message: error.message || "Failed to bulk calculate payroll",
         });
@@ -226,6 +165,11 @@ const addAdjustment = async (req, res) => {
         if (!payroll) {
             await transaction.rollback();
             return res.status(404).json({ success: false, message: "Payroll record not found." });
+        }
+
+        if (payroll.locked || ['reviewed','approved','paid'].includes(payroll.status)) {
+            await transaction.rollback();
+            return res.status(409).json({success:false,message:'Reviewed or finalized payroll is retained. Prepare a separately reviewed correction record.'});
         }
 
         // 2. Create Adjustment (Model validations will trigger here)
@@ -326,17 +270,20 @@ const addToAuditLog = (currentLog, action, user, prevStatus, newStatus) => {
  * Transition Payroll Period Status with Strict State Machine Logic
  */
 const updatePayrollPeriodStatus = async (req, res, targetStatus, allowedPrevStatus) => {
-    return await sequelize.transaction(async (transaction) => {
+    try {
+    const result = await sequelize.transaction(async (transaction) => {
         const { id } = req.params;
 
         // Use row-level locking on the period to prevent concurrent status updates
+        await require('../utils/reviewedPayrollGuard').actor(db,req.user,transaction);
         const period = await PayrollPeriod.findByPk(id, {
+            attributes: { include: ["audit_log"] },
             lock: transaction.LOCK.UPDATE,
             transaction
         });
 
         if (!period) {
-            return res.status(404).json({ success: false, message: "Payroll period not found." });
+            return { status: 404, body: { success: false, message: "Payroll period not found." } };
         }
 
         // Strict Status Flow Validation
@@ -351,12 +298,13 @@ const updatePayrollPeriodStatus = async (req, res, targetStatus, allowedPrevStat
         const targetRank = statusMap[targetStatus];
 
         if (targetRank !== currentRank + 1) {
-            return res.status(400).json({
+            return { status: 400, body: {
                 success: false,
                 message: `Invalid transition. Status flow must be: Draft -> Reviewed -> Approved -> Paid. Current: ${period.status}, Target: ${targetStatus}`
-            });
+            } };
         }
 
+        await require('../utils/reviewedPayrollGuard').periodTransition(db,period,transaction);
         const prevStatus = period.status;
         period.status = targetStatus;
         period.audit_log = addToAuditLog(period.audit_log, `Status update to ${targetStatus}`, req.user, prevStatus, targetStatus);
@@ -380,12 +328,16 @@ const updatePayrollPeriodStatus = async (req, res, targetStatus, allowedPrevStat
             transaction
         });
 
-        return res.status(200).json({
+        return { status: 200, body: {
             success: true,
             message: `Payroll period ${targetStatus} successfully`,
             data: period
-        });
+        } };
     });
+    return res.status(result.status).json(result.body);
+    } catch (error) {
+        return res.status(Number.isInteger(error.code) ? error.code : 503).json({success:false,message:Number.isInteger(error.code) ? error.message : "Payroll review unavailable; reload current inputs"});
+    }
 };
 
 
@@ -425,6 +377,7 @@ const getPayrollPeriodDetails = async (req, res) => {
 
         if (!period) return res.status(404).json({ success: false, message: "Period not found" });
 
+        await require('../utils/payrollCurrency').attachRowCurrencies(db,period.payrolls||[]);
         return res.status(200).json({ success: true, data: period });
     } catch (error) {
         console.error("Error fetching payroll details:", error);
@@ -442,6 +395,7 @@ const getEmployeePayrollHistory = async (req, res) => {
             include: [{ model: PayrollPeriod, as: "period" }],
             order: [[{ model: PayrollPeriod, as: "period" }, "start_date", "DESC"]]
         });
+        await require('../utils/payrollCurrency').attachRowCurrencies(db,payrolls);
         return res.status(200).json({ success: true, data: payrolls });
     } catch (error) {
         console.error("Error fetching payroll history:", error);
@@ -456,18 +410,28 @@ const getEmployeePayrollHistory = async (req, res) => {
 const deletePayrollPeriod = async (req, res) => {
     try {
         const { id } = req.params;
-        const period = await PayrollPeriod.findByPk(id);
-
-        if (!period) {
-            return res.status(404).json({ success: false, message: "Payroll period not found." });
-        }
-
-        await period.destroy();
-
-        return res.status(200).json({
-            success: true,
-            message: "Payroll period deleted successfully",
+        const result = await sequelize.transaction(async (transaction) => {
+            // Share the period lock used by status transitions.
+            const period = await PayrollPeriod.findByPk(id, {
+                transaction, lock: transaction.LOCK.UPDATE,
+            });
+            if (!period) {
+                return { status: 404, body: { success: false, message: "Payroll period not found." } };
+            }
+            const finalizedPayroll = await EmployeePayroll.findOne({
+                where: {
+                    payroll_period_id: id,
+                    [Op.or]: [{ locked: true }, { status: { [Op.in]: ["approved", "paid"] } }],
+                },
+                transaction, lock: transaction.LOCK.UPDATE,
+            });
+            if (["approved", "paid"].includes(period.status) || finalizedPayroll) {
+                return { status: 409, body: { success: false, message: "Finalized payroll history cannot be deleted." } };
+            }
+            await period.destroy({ transaction });
+            return { status: 200, body: { success: true, message: "Payroll period deleted successfully" } };
         });
+        return res.status(result.status).json(result.body);
     } catch (error) {
         console.error("Error deleting payroll period:", error);
         return res.status(500).json({ success: false, message: "Failed to delete payroll period" });

@@ -57,6 +57,7 @@ const getLeaveTypeById = async (req, res) => {
 // Create leave type
 const createLeaveType = async (req, res) => {
     try {
+        if(req.body.annual_quota!==undefined&&!require('../utils/leaveQuota')(req.body.annual_quota))return res.status(400).json({success:false,message:'Annual quota must be a nonnegative integer; zero means unlimited'});
         const {
             name,
             is_paid,
@@ -101,6 +102,7 @@ const createLeaveType = async (req, res) => {
 // Update leave type
 const updateLeaveType = async (req, res) => {
     try {
+        if(req.body.annual_quota!==undefined&&!require('../utils/leaveQuota')(req.body.annual_quota))return res.status(400).json({success:false,message:'Annual quota must be a nonnegative integer; zero means unlimited'});
         const leaveType = await LeaveType.findByPk(req.params.id);
         if (!leaveType) {
             return res.status(404).json({

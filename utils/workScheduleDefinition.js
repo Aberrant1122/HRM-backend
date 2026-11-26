@@ -1,0 +1,11 @@
+const {civil}=require('./leaveCharging');
+const fail=message=>{throw Object.assign(Error(message),{status:400});};
+const exact=(v,keys)=>{if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!keys.includes(k))||keys.some(k=>!Object.hasOwn(v,k)))fail('Explicit definition fields required');};
+const time=v=>{if(typeof v!=='string'||!/^([01]\d|2[0-3]):[0-5]\d$/.test(v))fail('Local clock times must use HH:mm');return Number(v.slice(0,2))*60+Number(v.slice(3));};
+module.exports=(kind,value)=>{
+ const common=['name','timeZone','archived'];exact(value,kind==='shift'?[...common,'start','end','endsNextDay']:kind==='calendar'?[...common,'weekdays','exceptions']:fail('Choose shift or calendar'));
+ if(typeof value.name!=='string'||!value.name.trim()||value.name.trim().length>150||typeof value.archived!=='boolean'||typeof value.timeZone!=='string'||value.timeZone.length>100)fail('Name, timezone and archive state required');try{new Intl.DateTimeFormat('en',{timeZone:value.timeZone});}catch{fail('Valid IANA timezone required');}
+ const out={name:value.name.trim(),timeZone:value.timeZone,archived:value.archived};
+ if(kind==='shift'){if(typeof value.endsNextDay!=='boolean')fail('Explicit overnight choice required');const start=time(value.start),end=time(value.end)+(value.endsNextDay?1440:0),duration=end-start;if(duration<=0||duration>1440)fail('Shift end must follow start within 24 hours');return{...out,start:value.start,end:value.end,endsNextDay:value.endsNextDay};}
+ if(!Array.isArray(value.weekdays)||value.weekdays.length>7||value.weekdays.some(n=>!Number.isInteger(n)||n<0||n>6)||new Set(value.weekdays).size!==value.weekdays.length||!Array.isArray(value.exceptions)||value.exceptions.length>366)fail('Choose distinct weekdays and at most366 dated exceptions');const seen=new Set(),exceptions=value.exceptions.map(e=>{exact(e,['date','working','label']);if(typeof e.date!=='string'||!civil(e.date)||typeof e.working!=='boolean'||typeof e.label!=='string'||!e.label.trim()||e.label.trim().length>150||seen.has(e.date))fail('Each exception needs a distinct civil date, working choice and label');seen.add(e.date);return{date:e.date,working:e.working,label:e.label.trim()};}).sort((a,b)=>a.date.localeCompare(b.date));return{...out,weekdays:[...value.weekdays].sort(),exceptions};
+};

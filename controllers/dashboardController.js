@@ -16,7 +16,7 @@ class DashboardController {
 
             if (userRole === 'admin') {
                 const [totalEmployees, attendanceData, todayLeaves, pendingLeaves, taskStats] = await Promise.all([
-                    User.count({ where: { role: 'employee' } }),
+                    User.count({ where: require('../utils/employeeCohort').where() }),
                     Attendance.findAll({ where: { date: today } }),
                     LeaveRequest.count({
                         where: {

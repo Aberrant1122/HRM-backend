@@ -19,6 +19,7 @@ module.exports = (sequelize, DataTypes) => {
 
     PayrollPeriod.init(
         {
+            currency: {type: DataTypes.STRING(3), allowNull: true, defaultValue: 'PKR', validate: {isIn: [['PKR']]}},
             name: {
                 type: DataTypes.STRING,
                 allowNull: false,

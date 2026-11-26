@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('NoticePeriod',{employeeId:{type:D.INTEGER,allowNull:false},startDate:{type:D.DATEONLY,allowNull:false},endDate:{type:D.DATEONLY,allowNull:false},voided:{type:D.BOOLEAN,allowNull:false},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'notice_periods'});

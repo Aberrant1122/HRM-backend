@@ -26,7 +26,16 @@ const {
 const { uploadEmployeeAttachments, uploadProfilePicture: uploadProfilePictureMiddleware } = require("../middleware/upload");
 const profileValidation = require("../validations/profileValidation");
 
+const { requireEmployeeAccess } = require("../middleware/employeeAccess");
+
 const router = express.Router();
+const archive=require("../controllers/employeeArchiveController");
+const privateArchive=(req,res,next)=>{res.setHeader("Cache-Control","private, no-store");next();};
+router.get("/archive",isAdmin,privateArchive,archive.list);
+router.get("/:id/archive",isAdmin,privateArchive,archive.read);
+router.post("/:id/archive",isAdmin,privateArchive,archive.write);
+
+router.get('/account-summary', isAdmin, require('../controllers/employeeAccountSummaryController').getEmployeeAccountSummary);
 
 // Routes
 
@@ -52,6 +61,12 @@ router.get(
       .isBoolean()
       .withMessage("includeUserInfo must be a boolean")
       .toBoolean(),
+    query('page').optional().isString().bail().isInt({ min: 1, max: 1000000 }).toInt(),
+    query('limit').optional().isString().bail().isInt({ min: 1, max: 1000 }).toInt(),
+    query('search').optional().isString().bail().trim().isLength({ max: 100 }),
+    query('department').optional().isString().bail().trim().isLength({ min: 1, max: 255 }),
+    query('status').optional().isString().bail().isIn(['active', 'inactive', 'suspended']),
+    handleValidationErrors,
   ],
   getAllEmployeesWithUserInfo
 );
@@ -66,6 +81,7 @@ router.get(
       .toInt(),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   getUserBankDetails
 );
 
@@ -94,6 +110,7 @@ router.post(
     bankInfoValidation,
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   addUserBankInfo
 );
 
@@ -108,6 +125,7 @@ router.put(
     ...updateBankInfoValidation,
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   updateUserBankInfo
 );
 
@@ -121,6 +139,7 @@ router.post(
       .toInt(),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   uploadEmployeeAttachments.array("attachments", 10), // Allow up to 10 files
   addEmployeeAttachments
 );
@@ -138,6 +157,7 @@ router.delete(
       .withMessage("Attachment ID is required"),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   removeEmployeeAttachment
 );
 
@@ -197,6 +217,7 @@ router.post(
       .toInt(),
     handleValidationErrors,
   ],
+  requireEmployeeAccess,
   uploadProfilePictureMiddleware.single("profilePicture"),
   uploadProfilePicture
 );

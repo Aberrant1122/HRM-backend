@@ -1,0 +1,1 @@
+module.exports=(sequelize,D)=>sequelize.define('OfficialManagerLink',{employeeId:{type:D.INTEGER,allowNull:false},managerId:{type:D.INTEGER,allowNull:false}},{tableName:'official_manager_links',timestamps:false});

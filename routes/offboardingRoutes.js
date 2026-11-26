@@ -1,0 +1,14 @@
+const router = require('express').Router();
+const { isAdmin } = require('../middleware/authMiddleware');
+const controller = require('../controllers/offboardingController')(require('../models'));
+router.use(isAdmin);
+router.use((req, res, next) => { res.setHeader('Cache-Control', 'private, no-store'); next(); });
+router.get('/employee/:employeeId', controller.read);
+router.post('/employee/:employeeId/commands', controller.command);
+const settlement = require('../controllers/settlementHandoff');
+router.get('/settlement/inbox',settlement.inbox);
+router.route('/employee/:employeeId/settlement').get(settlement).post(settlement);
+const draft=require('../controllers/settlementDraft');
+router.route('/employee/:employeeId/settlement-draft').get(draft).post(draft);
+const final=require('../controllers/settlementFinal')(require('../models'));router.route('/employee/:employeeId/settlement-final').get(final).post(final);
+module.exports = router;

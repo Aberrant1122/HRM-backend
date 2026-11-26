@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('EmploymentPeriod',{employeeId:{type:D.INTEGER,allowNull:false},startDate:{type:D.DATEONLY,allowNull:false},endDate:{type:D.DATEONLY,allowNull:true},voided:{type:D.BOOLEAN,allowNull:false,defaultValue:false},version:{type:D.INTEGER,allowNull:false},createdBy:{type:D.INTEGER,allowNull:false}},{tableName:'employment_periods'});

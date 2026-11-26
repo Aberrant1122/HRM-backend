@@ -1,0 +1,23 @@
+Direct-entry onboarding/probation — next implementation brief, 6 November 2026
+Priority: after People/permissions and dashboard, before attendance/shifts. Recruitment and Indeed are deferred until all non-recruitment modules are complete. DOC-021/022/043–055 support this workflow directly; no candidate, job opening or offer-conversion reference is required.
+
+Existing semantics to preserve
+An authenticated admin can invite a directly added employee. The backend creates an inactive account and UserInfo, stores a reset/invitation token, commits, then sends mail. Existing department/position/reportingManager/startDate/probationEndDate and employmentStatus fields are available. Department and reportingManager are strings; employmentStatus mixes employment categories with probation/terminated. Do not reinterpret those as a reliable lifecycle. Existing employee IDs shown by the UI are database user IDs, not an approved business numbering scheme. Existing invite/activation behavior remains; tracking a checklist must not activate or deactivate an account.
+
+Next bounded implementation
+Track an onboarding case linked to an existing directly entered employee identity, with no recruitment dependency. Use explicit manual checklist items, responsible person, optional due date, completion/waiver evidence, version checks and append-only history. Snapshot the selected template version, rather than changing existing cases when a template changes. Keep private documents under the owning employee/case authorization. Do not invent required checklist items, default probation duration or automatic completion rules. Administrative tracking can retain existing admin-only access pending the broader HR/Accounts capability decision; no new HR/Accounts grants or manager review authority should be inferred.
+
+Probation preparation
+Display explicitly recorded start/end dates and missing/contradictory fields. Manual scheduled evaluations and attributed HR/manager feedback need approved action authorities. Confirmation, extension and termination are explicit decisions with effective dates and history, not automatic consequences of an elapsed end date or a completed checklist. Do not auto-confirm, terminate, change salary, revoke access or send reminders from existing dates. Preserve historical dates and documents when a decision changes the planned end.
+
+Small actual choices for later automation, with recommendations
+1. Employee numbering: approve an HR identifier format/source. Recommendation: a separate immutable business ID with uniqueness and reviewed allocation; keep database IDs internal and do not renumber existing accounts automatically.
+2. Probation reminder/decision rules: choose recipient roles, notice interval, expiry-date meaning and permitted confirmation/extension/termination authorities. Recommendation: human confirmation with attributed history, no automatic confirmation/termination on expiry. Manual checklist tracking need not wait for automatic reminders.
+3. Reporting zone and employment lifecycle: choose company IANA zone and split lifecycle from employment category with a reviewed legacy mapping. Recommendation: store explicit lifecycle/category separately and flag unresolved records; do not derive former/probation/workforce membership from account status. Explicit calendar-date views can continue before a default company 'today' exists.
+4. Permissions: confirm the action matrix for confidential records, letters, feedback and approval decisions. Recommendation: retain existing admin-only administrative writes until approved capabilities are mapped; do not widen existing employee/manager access by naming a new HR role.
+
+Shared supporting work
+Versioned editable letters and signed/sent snapshots, private attachments, attributed approval history, captured development reminders and exports belong to this module as implemented. Signature authority, required templates, reminder delivery and mandatory steps need explicit configuration, not invented defaults. No production mail, data changes or deployment is authorized by this brief.
+
+Acceptance outline
+Direct entry with no recruitment tables; existing invite/activation unaffected; checklist template snapshot and item edits; stale completion conflict; authorized manual waiver with history; cross-employee private-file denial before storage; repeated requests do not duplicate history; document versions preserved; missing probation dates stay missing; date expiry never auto-confirms or terminates; reviewed manual decisions preserve prior dates/history. Use synthetic local fixtures and captured mail.

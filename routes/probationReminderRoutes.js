@@ -1,0 +1,2 @@
+const router=require('express').Router(),c=require('../controllers/probationReminderController')(require('../models'));
+router.use((req,res,next)=>{res.setHeader('Cache-Control','private, no-store');next();});router.get('/inbox',c.inbox);router.get('/employee/:employeeId',c.read);router.get('/employee/:employeeId/recipients',c.recipients);router.post('/employee/:employeeId/commands',c.command);module.exports=router;

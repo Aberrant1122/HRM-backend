@@ -1,0 +1,1 @@
+module.exports=(s,D)=>s.define('HrTaskApprovalGrant',{userId:{type:D.INTEGER,primaryKey:true},active:{type:D.BOOLEAN,allowNull:false},version:{type:D.INTEGER,allowNull:false},grantedBy:{type:D.INTEGER,allowNull:false}},{tableName:'hr_task_approval_grants'});
