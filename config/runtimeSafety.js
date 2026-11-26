@@ -10,10 +10,7 @@ function flag(name, fallback) {
 
 function mailOptions() {
   if (!staging) {
-    return {
-      service: process.env.EMAIL_SERVICE || "gmail",
-      auth: { user: process.env.EMAIL_USER || "", pass: process.env.EMAIL_PASS || "" },
-    };
+    return require('./productionMailOptions')();
   }
   const mode = process.env.MAIL_MODE || "capture";
   // Safe staging default: Nodemailer serializes mail without network delivery.
