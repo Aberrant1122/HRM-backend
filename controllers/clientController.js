@@ -7,19 +7,11 @@ const nodemailer = require("nodemailer");
 const { getPagination, getPagingData } = require("../utils/pagination");
 
 // Load environment variables
-const EMAIL_SERVICE = process.env.EMAIL_SERVICE || "gmail";
 const EMAIL_USER = process.env.EMAIL_USER || "";
-const EMAIL_PASS = process.env.EMAIL_PASS || "";
 const APP_URL = process.env.APP_URL || "http://localhost:3000";
 
 // Email transporter
-const transporter = nodemailer.createTransport({
-  service: EMAIL_SERVICE,
-  auth: {
-    user: EMAIL_USER,
-    pass: EMAIL_PASS,
-  },
-});
+const transporter = nodemailer.createTransport(require('../config/productionMailOptions')());
 
 // Validation rules for adding a client
 const validateAddClient = [
